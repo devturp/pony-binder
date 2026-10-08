@@ -18,7 +18,7 @@ All data lives in your browser's localStorage. Nothing gets uploaded.
 Add the set to `sets` in `data/catalog.json`, then **append** its cards to the end of `cards`. Share links depend on card order, so existing entries must keep their positions.
 
 ## Credits
-Card list and images: [MLP Merch Kayou Card Database](https://data.mlpmerch.com/kayou-cards/series/trading-card-game/booster-pack/). Fan-made project, not affiliated with Hasbro or KAYOU.
+Original card list: [MLP Merch Kayou Card Database](https://data.mlpmerch.com/kayou-cards/series/trading-card-game/booster-pack/). Fan-made project, not affiliated with Hasbro or KAYOU.
 
 
 ## Development
@@ -47,3 +47,10 @@ Run `npm test` with Node.js 22 or later. No dependency installation is needed. T
 Catalog fields: `sets` contains `code`, `name`, and `series`. Each record in `cards` contains `id`, `s` (set code), `n` (name), `r` (rarity), `sh` (Shining boolean), `c` (printed number), and `img` (image URL). Runtime indexes and derived numbers stay in JavaScript. Keep existing IDs and array positions unchanged.
 
 Card data from the MLP Merch Kayou Card Database (data.mlpmerch.com), CC BY-NC-SA.
+
+## Official card images
+All 572 card image URLs point directly to KAYOU's official image host, `static-sg.kayouofficial.com`. The catalog remains local JSON; browsers download card images directly from KAYOU.
+
+Image sources: [Fantasy Wonderland](https://www.kayouofficial.com/en-US/series/series-2nicsllo), [Discord!!!](https://www.kayouofficial.com/en-US/series/series-ry03llcx), and [Nightmare Night](https://www.kayouofficial.com/en-US/series/series-27z4pa09).
+
+Run `python3 scripts/update-kayou-images.py` to refresh image URLs from those pages. The updater matches printed card numbers and Shining status, including day/night and A/A2/B/B2/C/C2 variants. It preserves card IDs, names, all other metadata, and array order. It resolves every image before writing the catalog and stops on missing or duplicate matches. The updater requires network access and Python 3.9 or later, with no third-party packages. It depends on KAYOU's server-rendered page format.

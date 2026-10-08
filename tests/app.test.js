@@ -233,3 +233,10 @@ test('startup waits for the catalog and recovers after a failed request', async 
     assert.equal(get('#menuDlg').open,true);
   } finally { globalThis.fetch=originalFetch; console.error=originalError; }
 });
+
+
+test('all card images use Kayou while collection metadata and positions stay unchanged', () => {
+  assert.ok(rawCatalog.cards.every(c => new URL(c.img).hostname === 'static-sg.kayouofficial.com'));
+  const metadata=rawCatalog.cards.map(({ img, ...card })=>card);
+  assert.equal(createHash('sha256').update(JSON.stringify(metadata)).digest('hex'), '5dab7b60870ff8e47f666def696059da330b9a52994cb676d2997a48bd257849');
+});
