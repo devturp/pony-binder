@@ -1,64 +1,8 @@
-(() => {
-'use strict';
-const SETS = window.SETS, CARDS = window.CARDS;
-const RARITIES = [
-  ['C','Common'],['U','Uncommon'],['SR','Silver Rare'],['SPR','Sapphire Rare'],
-  ['ER','Emerald Rare'],['GR','Gold Rare'],['CR','Colorful Rare'],['RR','Ruby Rare']];
-const RNAME = Object.fromEntries(RARITIES);
-const RORD = Object.fromEntries(RARITIES.map(([k],i)=>[k,i]));
-const COLORS = ['#d94c95','#6c4bb6','#2f9e6f','#e07a2e','#2f7fd9','#b8418a','#8a6d1f','#c0392b'];
-const KEY = 'ponybinder.v1';
+import { SETS, CARDS, RARITIES, RNAME, SORTED, BY_ID } from './modules/catalog.js';
+import { db, save, me, uid, newProfile, COLORS } from './modules/storage.js';
+import { encode, decode } from './modules/share.js';
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-
-CARDS.forEach((c,i) => { c.i = i; c.num = parseInt(c.c.replace(/^.*?(\d+)$/,'$1'),10) || 0; });
-const SORTED = [...CARDS].sort((a,b) => a.s.localeCompare(b.s) || RORD[a.r]-RORD[b.r] || a.num-b.num || (a.sh-b.sh));
-const BY_ID = Object.fromEntries(CARDS.map(c => [c.id,c]));
-
-// ---------- storage ----------
-function load(){
-  try { const d = JSON.parse(localStorage.getItem(KEY)); if (d && d.profiles) return d; } catch(e){}
-  return { profiles:{}, current:null };
-}
-let db = load();
-const save = () => localStorage.setItem(KEY, JSON.stringify(db));
-const me = () => db.profiles[db.current];
-const uid = () => Math.random().toString(36).slice(2,9);
-function newProfile(name){
-  const id = uid(), n = Object.keys(db.profiles).length;
-  db.profiles[id] = { name, color: COLORS[n % COLORS.length], cards:{}, created: Date.now() };
-  db.current = id; save(); return id;
-}
-
-// ---------- share link encoding ----------
-// one byte per card index: bits 0-5 quantity (max 63), bit 6 wishlist, bit 7 trade
-function encode(p){
-  // sparse: for each card with data, varint(index gap) then one value byte
-  const out = []; let prev = -1;
-  CARDS.forEach((c,i) => { const e = p.cards[c.id]; if(!e) return;
-    const b = Math.min(e.q||0,63) | (e.w?64:0) | (e.t?128:0); if(!b) return;
-    let gap = i - prev - 1; prev = i;
-    do { let x = gap & 127; gap >>= 7; if (gap) x |= 128; out.push(x); } while (gap);
-    out.push(b); });
-  let bin = ''; out.forEach(b => bin += String.fromCharCode(b));
-  const b64 = btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-  return 'v2.' + encodeURIComponent(p.name) + '.' + b64;
-}
-function decode(str){
-  const m = /^v2\.([^.]*)\.([A-Za-z0-9_-]*)$/.exec(str); if(!m) return null;
-  try {
-    let b64 = m[2].replace(/-/g,'+').replace(/_/g,'/'); while(b64.length%4) b64+='=';
-    const bin = atob(b64), cards = {}; let pos = 0, idx = -1;
-    while (pos < bin.length){
-      let gap = 0, shift = 0, x;
-      do { x = bin.charCodeAt(pos++); gap |= (x & 127) << shift; shift += 7; } while (x & 128 && pos < bin.length);
-      idx += gap + 1; const b = bin.charCodeAt(pos++);
-      if (idx < CARDS.length && b) cards[CARDS[idx].id] = { q:b&63, w:!!(b&64), t:!!(b&128) };
-    }
-    return { name: decodeURIComponent(m[1]) || 'Friend', color:'#6c4bb6', cards };
-  } catch(e){ return null; }
-}
-
 // ---------- state ----------
 const st = { set:'BP02', q:'', rarity:'all', status:'all', shining:false, view:null };
 function parseHash(){
@@ -354,4 +298,3 @@ parseHash();
 if (db.current && !db.profiles[db.current]) db.current = Object.keys(db.profiles)[0] || null;
 renderAll();
 if (!me() && !st.view) openWelcome();
-})();

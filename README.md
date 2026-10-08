@@ -19,3 +19,11 @@ Add the set to `SETS` in `cards.js`, then **append** its cards to the end of `CA
 
 ## Credits
 Card list and images: [MLP Merch Kayou Card Database](https://data.mlpmerch.com/kayou-cards/series/trading-card-game/booster-pack/). Fan-made project, not affiliated with Hasbro or KAYOU.
+
+## Code organization
+- `app.js`: UI rendering, filters, dialogs, and event handlers
+- `modules/catalog.js`: catalog indexes and rarity definitions
+- `modules/storage.js`: browser-local profiles and persistence
+- `modules/share.js`: backward-compatible share-link codec
+
+Serve the site over HTTP (for example, GitHub Pages or a local static server). ES modules do not reliably load from `file://` URLs.
