@@ -1,12 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { runInThisContext } from 'node:vm';
 import { createHash } from 'node:crypto';
 import { createDOM } from './dom.js';
 
 globalThis.window = { addEventListener(){} };
-runInThisContext(readFileSync(new URL('../cards.js', import.meta.url), 'utf8'));
+const rawCatalog = JSON.parse(readFileSync(new URL('../data/catalog.json', import.meta.url), 'utf8'));
+globalThis.fetch = async url => {
+  assert.equal(url.pathname.endsWith('/data/catalog.json'), true);
+  return { ok:true, json:async()=>structuredClone(rawCatalog) };
+};
+const catalog = await import('../js/catalog.js');
+await catalog.loadCatalog();
 const { CARDS, SETS, SORTED } = await import('../js/catalog.js');
 const { createStore } = await import('../js/storage.js');
 const { createState, entry } = await import('../js/state.js');
@@ -192,4 +197,39 @@ test('restore dialog imports backups and respects replacement confirmation', asy
   app.dialogs.openBackup(); app.get('#impFile').onchange({ target:{ files:[{ text:async()=>'{bad' }] } });
   await new Promise(resolve=>setImmediate(resolve));
   assert.equal(message,'That file is not a Pony Binder backup.');
+});
+
+
+test('catalog loading rejects HTTP errors, malformed JSON and invalid data without replacing the catalog', async () => {
+  const before = catalog.CARDS;
+  await assert.rejects(catalog.loadCatalog(async()=>({ ok:false, status:404 })), /404/);
+  await assert.rejects(catalog.loadCatalog(async()=>({ ok:true, json:async()=>{ throw new SyntaxError('Bad JSON'); } })), /Bad JSON/);
+  for (const change of [d=>d.cards.push(d.cards[0]), d=>d.cards[0].s='unknown', d=>d.cards[0].r='unknown', d=>d.cards[0].sh='yes', d=>d.sets.push(d.sets[0]), d=>d.cards=[]]) {
+    const data=structuredClone(rawCatalog); change(data);
+    await assert.rejects(catalog.loadCatalog(async()=>({ ok:true, json:async()=>data })), /Invalid catalog/);
+    assert.equal(catalog.CARDS, before);
+  }
+});
+
+test('startup waits for the catalog and recovers after a failed request', async () => {
+  const { startApp } = await import('../app.js');
+  const { get, document }=createDOM(); setup(); globalThis.document=document;
+  const originalFetch=globalThis.fetch, originalError=console.error;
+  let finish;
+  try {
+    globalThis.fetch=()=>new Promise(resolve=>{ finish=resolve; });
+    const pending=startApp();
+    assert.equal(get('#binder').hidden,true);
+    assert.equal(get('#grid').listeners.click,undefined);
+    finish({ ok:false, status:503 }); console.error=()=>{};
+    await pending;
+    assert.match(get('#catalogStatus').innerHTML,/Unable to load cards/);
+    assert.equal(get('#grid').listeners.click,undefined);
+    globalThis.fetch=originalFetch;
+    await get('#retryCatalog').onclick();
+    assert.equal(get('#catalogStatus').hidden,true);
+    assert.equal(get('#binder').hidden,false);
+    assert.equal(typeof get('#grid').listeners.click,'function');
+    assert.equal(get('#menuDlg').open,true);
+  } finally { globalThis.fetch=originalFetch; console.error=originalError; }
 });
