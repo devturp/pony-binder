@@ -35,7 +35,7 @@ export function createDOM(){
     showModal(){ this.open = true; }
     close(){ this.open = false; }
   }
-  for(const id of ['profileArea','viewBanner','setTabs','rarity','status','stats','grid','count','q','shining','menuDlg','cardDlg','toast']) nodes.set('#'+id, new Element());
+  for(const id of ['catalogStatus','binder','profileArea','viewBanner','setTabs','rarity','status','stats','grid','count','q','shining','menuDlg','cardDlg','toast']) nodes.set('#'+id, new Element());
   const document = { body:new Element(), querySelector:selector => nodes.get(selector) || null };
   return { document, get:selector => nodes.get(selector), nodes };
 }
