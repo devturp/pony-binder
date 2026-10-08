@@ -1,0 +1,195 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { runInThisContext } from 'node:vm';
+import { createHash } from 'node:crypto';
+import { createDOM } from './dom.js';
+
+globalThis.window = { addEventListener(){} };
+runInThisContext(readFileSync(new URL('../cards.js', import.meta.url), 'utf8'));
+const { CARDS, SETS, SORTED } = await import('../js/catalog.js');
+const { createStore } = await import('../js/storage.js');
+const { createState, entry } = await import('../js/state.js');
+const { createFilters } = await import('../js/filters.js');
+const { encode, decode } = await import('../js/sharing.js');
+const { backupData, readBackup, csvData } = await import('../js/backup.js');
+const { createRenderer } = await import('../js/rendering.js');
+const { createDialogs } = await import('../js/dialogs.js');
+const { bindEvents } = await import('../js/events.js');
+
+function setup(saved=null){
+  const data = new Map(saved ? [['ponybinder.v1', saved]] : []);
+  globalThis.localStorage = { getItem:key => data.get(key) ?? null, setItem:(key,value) => data.set(key,value) };
+  globalThis.location = { hash:'', origin:'https://example.com', pathname:'/pony-binder/' };
+  const store = createStore();
+  return { store, state:createState(store), data };
+}
+function profile(){
+  return { name:'Nick & Cordelia', color:'#d94c95', cards:{
+    [CARDS[0].id]:{ q:2, w:false, t:true },
+    [CARDS[130].id]:{ q:0, w:true, t:false },
+    [CARDS.at(-1).id]:{ q:63, w:true, t:true }
+  } };
+}
+
+test('catalog keeps all 572 cards in their original share-link positions', () => {
+  assert.equal(CARDS.length, 572);
+  assert.equal(SETS.length, 3);
+  assert.equal(new Set(CARDS.map(c => c.id)).size, 572);
+  assert.equal(createHash('sha256').update(JSON.stringify(CARDS.map(c => c.id))).digest('hex'), 'a8f37da8422cf2cf5a991296d2b5e95b2e27d481b2765f60872f18d907785433');
+  assert.ok(CARDS.every((c,i) => c.i===i));
+  assert.equal(SORTED.length, 572);
+ });
+test('existing v2 link fixture preserves gaps, quantities and flags', () => {
+  const p = profile();
+  assert.equal(encode(p), 'v2.Nick%20%26%20Cordelia.AIKBAUC4A_8');
+  assert.deepEqual(decode('v2.Nick%20%26%20Cordelia.AIKBAUC4A_8'), { ...p, color:'#6c4bb6' });
+  assert.equal(decode('invalid'), null);
+  assert.equal(decode('v2.%ZZ.'), null);
+ });
+test('empty and Unicode profiles round-trip without storing zero entries', () => {
+  const p = { name:'コーデリア 🦄', cards:{ [CARDS[10].id]:{ q:0, w:false, t:false } } };
+  assert.deepEqual(decode(encode(p)), { name:p.name, color:'#6c4bb6', cards:{} });
+ });
+test('loads existing storage and persists independent collectors under the same key', () => {
+  const saved = { profiles:{ nick:profile() }, current:'nick' };
+  const { store, data } = setup(JSON.stringify(saved));
+  assert.deepEqual(store.me(), saved.profiles.nick);
+  store.newProfile('Cordelia');
+  assert.equal(store.me().name, 'Cordelia');
+  assert.deepEqual(store.db.profiles.nick, saved.profiles.nick);
+  assert.deepEqual(JSON.parse(data.get('ponybinder.v1')), store.db);
+ });
+test('missing and corrupt storage start with an empty database', () => {
+  assert.deepEqual(setup().store.db, { profiles:{}, current:null });
+  assert.deepEqual(setup('{bad').store.db, { profiles:{}, current:null });
+ });
+test('card updates preserve flags, clamp quantities and remove empty entries', () => {
+  const { store, state } = setup(); store.newProfile('Nick');
+  const c = CARDS[0];
+  state.setEntry(c, { q:100, w:true });
+  assert.deepEqual(entry(store.me(),c), { q:63, w:true, t:false });
+  state.setEntry(c, { q:-5 });
+  assert.deepEqual(entry(store.me(),c), { q:0, w:true, t:false });
+  state.setEntry(c, { w:false });
+  assert.equal(store.me().cards[c.id], undefined);
+  assert.deepEqual(createStore().me().cards, {});
+ });
+test('filters retain set, rarity, search, Shining and status behavior', () => {
+  const { store, state } = setup(); store.newProfile('Nick');
+  store.me().cards = profile().cards;
+  const filters = createFilters(state, store), { st } = state;
+  for(const set of [...SETS.map(s => s.code),'all']){
+    st.set=set;
+    assert.deepEqual(SORTED.filter(filters.matches), SORTED.filter(c => set==='all' || c.s===set));
+  }
+  st.set='all'; st.shining=true;
+  assert.deepEqual(SORTED.filter(filters.matches), SORTED.filter(c => c.sh));
+  st.shining=false; st.rarity='CR';
+  assert.deepEqual(SORTED.filter(filters.matches), SORTED.filter(c => c.r==='CR'));
+  st.rarity='all'; st.q='Twilight';
+  assert.deepEqual(SORTED.filter(filters.matches), SORTED.filter(c => c.n.toLowerCase().includes('twilight') || c.c.toLowerCase().includes('twilight')));
+  st.q=CARDS[0].c.toLowerCase(); assert.ok(filters.matches(CARDS[0])); st.q='';
+  for(const [status, expected] of Object.entries({ owned:[0,571], missing:Array.from({length:572},(_,i)=>i).filter(i=>i!==0&&i!==571), wish:[130,571], trade:[0,571], dupes:[0,571] })){
+    st.status=status;
+    assert.deepEqual(CARDS.filter(filters.matches).map(c=>c.i), expected);
+  }
+ });
+test('shared views select the friend and compare both trade directions', () => {
+  const { store, state } = setup(); store.newProfile('Nick');
+  state.setEntry(CARDS[130], { q:2 });
+  location.hash='#view='+encode(profile()); state.parseHash();
+  assert.equal(state.active().name, profile().name);
+  const { matches } = createFilters(state,store); state.st.set='all';
+  state.st.status='theyhave'; assert.deepEqual(CARDS.filter(matches).map(c=>c.i), [0,571]);
+  state.st.status='ihave'; assert.deepEqual(CARDS.filter(matches).map(c=>c.i), [130]);
+  location.hash=''; state.parseHash(); assert.equal(state.active(), store.me());
+ });
+test('version 1 backups retain metadata and ignore unknown card IDs on restore', () => {
+  const p = profile(), backup = backupData(p);
+  assert.equal(backup.app, 'pony-binder'); assert.equal(backup.version, 1);
+  assert.ok(!Number.isNaN(Date.parse(backup.exported)));
+  assert.deepEqual(readBackup(JSON.stringify(backup)), p);
+  backup.profile = { ...p, cards:{ ...p.cards, unknown:{ q:9 } } };
+  assert.deepEqual(readBackup(JSON.stringify(backup)), p);
+  assert.throws(() => readBackup('{}')); assert.throws(() => readBackup('bad'));
+ });
+test('CSV output matches the pre-refactor format and sort order', () => {
+  const csv = csvData(profile());
+  assert.equal(csv.split('\n').length,573);
+  assert.equal(createHash('sha256').update(csv).digest('hex'), '7e0767f39f300a45c29dde50c21796a76c59d7b8666ac74b0b6249b98ba7a261');
+ });
+
+function wire(saved=null){
+  const env=setup(saved), dom=createDOM(); globalThis.document=dom.document;
+  Object.defineProperty(globalThis, 'navigator', { configurable:true, value:{} });
+  const filters=createFilters(env.state,env.store);
+  let dialogs;
+  const renderer=createRenderer(env.store,env.state,filters, {
+    openProfiles:()=>dialogs.openProfiles(), openShare:()=>dialogs.openShare(),
+    openBackup:()=>dialogs.openBackup(), openWelcome:()=>dialogs.openWelcome()
+  });
+  const setEntry=(c,patch)=>{ env.state.setEntry(c,patch); renderer.updateCard(c); renderer.renderStats(); };
+  dialogs=createDialogs(env.store,env.state,renderer.renderAll,setEntry);
+  bindEvents(env.store,env.state,renderer,dialogs,setEntry);
+  return { ...env, ...dom, renderer, dialogs };
+}
+test('first-time welcome creates a collector and renders the default binder', () => {
+  const app=wire(); app.renderer.renderAll(); app.dialogs.openWelcome();
+  assert.equal(app.get('#menuDlg').open,true);
+  app.get('#wname').value='Nick'; app.get('#wf').onsubmit({ preventDefault(){} });
+  assert.equal(app.store.me().name,'Nick'); assert.equal(app.get('#menuDlg').open,false);
+  assert.match(app.get('#profileArea').innerHTML,/Nick/);
+  assert.equal(app.get('#count').textContent, `Showing ${CARDS.filter(c=>c.s==='BP02').length} cards`);
+  assert.equal(typeof app.get('#shareBtn').onclick,'function');
+ });
+test('dialogs and delegated events work after switching profiles and in read-only mode', () => {
+  const app=wire(); app.store.newProfile('Nick'); app.renderer.renderAll();
+  app.get('#whoBtn').onclick(); app.get('#pname').value='Cordelia';
+  app.get('#pf').onsubmit({ preventDefault(){} });
+  assert.equal(app.store.me().name,'Cordelia');
+  const c=CARDS.find(c=>c.s==='BP02');
+  const click=act=>app.get('#grid').listeners.click({ target:{ closest:()=>({ dataset:{ act }, closest:()=>({ dataset:{ i:c.i } }) }) } });
+  click('inc'); assert.equal(entry(app.store.me(),c).q,1);
+  click('open'); assert.equal(app.get('#cardDlg').open,true);
+  app.get('#cardDlg').querySelectorAll('[data-a]').find(b=>b.dataset.a==='wish').onclick();
+  assert.equal(entry(app.store.me(),c).w,true);
+  app.dialogs.openShare(); assert.match(app.get('#menuDlg').innerHTML,/#view=v2.Cordelia/);
+  app.dialogs.openBackup(); assert.equal(typeof app.get('#expBtn').onclick,'function');
+  app.state.st.view=decode(encode(profile())); app.renderer.renderAll();
+  click('inc'); assert.equal(entry(app.store.me(),c).q,1);
+  click('open'); assert.equal(app.get('#cardDlg').querySelectorAll('[data-a]').length,0);
+  assert.match(app.get('#viewBanner').innerHTML,/view only/);
+ });
+test('app entry point boots its module graph and attaches controls', async () => {
+  const { get, document }=createDOM(); setup(); globalThis.document=document;
+  await import('../app.js');
+  assert.equal(get('#menuDlg').open,true);
+  assert.equal(typeof get('#grid').listeners.click,'function');
+  assert.equal(typeof get('#rarity').onchange,'function');
+ });
+
+test('restore dialog imports backups and respects replacement confirmation', async () => {
+  const app=wire(); app.store.newProfile('Nick'); app.renderer.renderAll(); app.dialogs.openBackup();
+  const p=profile(), text=JSON.stringify(backupData(p));
+  app.get('#impFile').onchange({ target:{ files:[{ text:async()=>text }] } });
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.deepEqual(app.store.me().cards,p.cards);
+  assert.equal(app.store.me().name,p.name);
+  assert.equal(app.get('#menuDlg').open,false);
+  app.store.me().cards={}; app.store.save();
+  globalThis.confirm=()=>false;
+  app.dialogs.openBackup(); app.get('#impFile').onchange({ target:{ files:[{ text:async()=>text }] } });
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.deepEqual(app.store.me().cards,{});
+  assert.equal(app.get('#menuDlg').open,true);
+  globalThis.confirm=()=>true;
+  app.get('#impFile').onchange({ target:{ files:[{ text:async()=>text }] } });
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.deepEqual(app.store.me().cards,p.cards);
+  assert.equal(Object.values(app.store.db.profiles).filter(profile=>profile.name===p.name).length,1);
+  let message; globalThis.alert=text=>{message=text;};
+  app.dialogs.openBackup(); app.get('#impFile').onchange({ target:{ files:[{ text:async()=>'{bad' }] } });
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(message,'That file is not a Pony Binder backup.');
+});
