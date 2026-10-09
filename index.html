@@ -31,7 +31,13 @@
 
 <p class="wrap" id="catalogStatus" role="status">Loading cards…</p>
 <main class="wrap" id="binder" hidden>
-  <section class="stats" id="stats" aria-label="Collection progress"></section>
+  <section class="stats-area" id="statsArea" aria-label="Collection progress">
+    <div class="mobile-progress">
+      <div class="progress-copy"><span id="progressText"></span><div class="bar"><i id="progressBar"></i></div></div>
+      <button class="btn" id="statsToggle" type="button" aria-expanded="false" aria-controls="stats">Show stats</button>
+    </div>
+    <div class="stats" id="stats"></div>
+  </section>
 
   <section class="toolbar" aria-label="Filters">
     <div class="set-tabs" id="setTabs" role="tablist"></div>

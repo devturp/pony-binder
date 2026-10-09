@@ -19,6 +19,7 @@ export function bindEvents(store, state, renderer, dialogs, setEntry){
     if (act==='wish') setEntry(c,{w:!e.w});
     if (act==='trade') setEntry(c,{t:!e.t});
   });
+  $('#statsToggle').onclick = () => { st.statsExpanded = !st.statsExpanded; renderer.renderStats(); };
   $('#quickAdd').onclick = () => { st.quick = !st.quick; renderGrid(); };
   function saveQuantity(ev){
     const input = ev.target.closest('[data-quantity]');

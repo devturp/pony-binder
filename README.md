@@ -57,3 +57,6 @@ Run `python3 scripts/update-kayou-images.py` to refresh image URLs from those pa
 
 ## Quick Add
 Use **Quick Add** above the collection to switch to a compact checklist. Existing set, search, rarity, status and Shining filters apply in both views. Enter a whole quantity from 0 to 63; valid edits save immediately to localStorage. Blank, fractional or out-of-range edits do not overwrite saved quantities and revert when committed. Editing preserves wishlist and trade flags, updates completion stats, and keeps rows in place until the next filter or view change. Shared binders display quantities without editable inputs. The view toggle lasts for the current session.
+
+## Mobile layout
+On screens up to 640px wide, collection stats start as a compact set completion summary and progress bar. **Show stats** expands the full dashboard; the expanded state stays intact during edits and filter or profile changes in the current session. Desktop shows the full dashboard. Search occupies its own row, filters fit in two columns, and card quantity buttons use 44px touch targets. Quick Add quantity fields use 16px text to avoid automatic zoom on phones.

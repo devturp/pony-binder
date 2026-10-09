@@ -55,13 +55,21 @@ export function createRenderer(store, state, filters, actions){
   }
 
   function renderStats(){
-    const p = active(); if (!p){ $('#stats').innerHTML=''; return; }
+    const p = active();
+    $('#statsArea').hidden = !p;
+    if (!p){ $('#stats').innerHTML=''; return; }
+    $('#statsArea').classList.toggle('expanded', st.statsExpanded);
+    $('#statsToggle').setAttribute('aria-expanded', String(st.statsExpanded));
+    $('#statsToggle').textContent = st.statsExpanded ? 'Hide stats' : 'Show stats';
     const scope = CARDS.filter(inScope);
     const owned = scope.filter(c => entry(p,c).q>0).length;
     const total = scope.reduce((a,c) => a + entry(p,c).q, 0);
     const wish = scope.filter(c => entry(p,c).w).length;
     const trade = scope.filter(c => entry(p,c).t || entry(p,c).q>1).length;
     const pct = scope.length ? Math.round(owned/scope.length*100) : 0;
+    const summaryLabel = st.set==='all' ? 'All sets' : SETS.find(s=>s.code===st.set).name;
+    $('#progressText').textContent = `${summaryLabel} · ${owned} / ${scope.length} · ${pct}%`;
+    $('#progressBar').style.width = `${pct}%`;
     const base = scope.filter(c => !c.sh), baseOwned = base.filter(c => entry(p,c).q>0).length;
     const label = st.set==='all' ? 'All sets' : SETS.find(s=>s.code===st.set).name;
     const rar = RARITIES.map(([k]) => { const r = scope.filter(c=>c.r===k); if(!r.length) return '';

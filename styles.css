@@ -151,3 +151,25 @@ select{border:1px solid var(--border);background:var(--surface);border-radius:99
   .quick-row{gap:8px;padding:8px 10px}
   .quick-quantity{flex-direction:column;gap:2px}
 }
+
+/* Compact collection controls on phones; retain the full desktop dashboard. */
+.mobile-progress{display:none}
+@media(max-width:640px){
+  .mobile-progress{display:flex;align-items:center;gap:10px;padding:12px;background:var(--surface);border:1px solid var(--border);border-radius:12px;margin:14px 0}
+  .progress-copy{flex:1;min-width:0;font-size:13px;font-weight:800;line-height:1.4}
+  .mobile-progress .bar{margin-top:6px;height:6px}
+  .mobile-progress .btn{flex-shrink:0;min-height:44px;padding:8px 12px}
+  .stats-area:not(.expanded) .stats{display:none}
+  .stats-area .stats{margin:0 0 14px}
+  .filters{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  .search{grid-column:1/-1;min-width:0}
+  .search input{min-height:44px;font-size:16px}
+  .filters select{min-width:0;width:100%;min-height:44px}
+  .filters .toggle{grid-column:1/-1;min-height:44px}
+  .tab,.collection-view .btn{min-height:44px}
+  .ctrls{flex-wrap:wrap;gap:6px}
+  .ctrls .stepper{width:100%;justify-content:space-between}
+  .ctrls .icon-btn{width:44px;height:44px}
+  .ctrls>div:not(.stepper){display:flex;justify-content:flex-end;width:100%}
+  .quick-quantity input{font-size:16px}
+}
