@@ -281,3 +281,20 @@ test('Quick Add applies filters and shared quantities remain read only', () => {
   assert.equal(app.data.get('ponybinder.v1'),before);
   assert.match(app.get('#quickHelp').textContent,/read only/);
 });
+
+test('mobile progress updates quantities and keeps expanded stats through view changes', () => {
+  const app=wire(); app.store.newProfile('Nick'); app.renderer.renderAll();
+  assert.equal(app.get('#statsToggle')['aria-expanded'],'false');
+  assert.match(app.get('#progressText').textContent,/0 \/ 191 · 0%/);
+  app.get('#statsToggle').onclick();
+  assert.equal(app.get('#statsToggle')['aria-expanded'],'true');
+  assert.equal(app.get('#statsToggle').textContent,'Hide stats');
+  const c=CARDS.find(c=>c.s==='BP02');app.state.setEntry(c,{q:1});app.renderer.renderStats();
+  assert.match(app.get('#progressText').textContent,/1 \/ 191 · 1%/);
+  assert.equal(app.get('#progressBar').style.width,'1%');
+  app.get('#quickAdd').onclick();app.renderer.renderAll();
+  assert.equal(app.get('#statsToggle')['aria-expanded'],'true');
+  app.state.st.view={name:'Friend',cards:{}};app.renderer.renderAll();
+  assert.match(app.get('#progressText').textContent,/0 \/ 191/);
+  app.get('#statsToggle').onclick();assert.equal(app.get('#statsToggle')['aria-expanded'],'false');
+});
