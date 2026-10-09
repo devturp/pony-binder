@@ -15,7 +15,7 @@ A simple collection tracker for the English **My Little Pony Trading Card Game**
 All data lives in your browser's localStorage. Nothing gets uploaded.
 
 ## Adding a new set
-Add the set to `sets` in `data/catalog.json`, then **append** its cards to the end of `cards`. Share links depend on card order, so existing entries must keep their positions.
+Add the set to `sets` in `data/catalog.json`, then **append** its cards to the end of `cards`. New v3 share links use stable card IDs. Keep existing IDs unchanged. Old v2 links use a frozen ID mapping in `js/legacy-share-ids.js`, which must never be edited.
 
 ## Credits
 Original card list: [MLP Merch Kayou Card Database](https://data.mlpmerch.com/kayou-cards/series/trading-card-game/booster-pack/). Fan-made project, not affiliated with Hasbro or KAYOU.
@@ -32,7 +32,7 @@ The site uses native JavaScript modules. There is no bundler or runtime dependen
 | `js/catalog.js` | JSON loading, validation, catalog lookup, derived card numbers, display sorting and rarity metadata |
 | `js/storage.js` | Load/save the existing `ponybinder.v1` database and create collectors |
 | `js/state.js` | Active binder, view hash, card entries and quantity updates |
-| `js/sharing.js` | Existing v2 share-link encoding and decoding |
+| `js/sharing.js` | Stable-ID v3 encoding and backward-compatible v2 decoding |
 | `js/filters.js` | Set, search, rarity, status, Shining and comparison matching |
 | `js/rendering.js` | Profile header, shared-view banner, tabs, filters, stats and grid |
 | `js/dialogs.js` | Card details, welcome, profiles, sharing and backup dialogs |
@@ -44,7 +44,7 @@ Renderer dialog callbacks and dialog render callbacks are wired in `app.js`. The
 
 Run `npm test` with Node.js 22 or later. No dependency installation is needed. Tests cover storage compatibility, card updates, share links, filters, comparisons, backups, CSV output, module startup and dialog/event wiring. The wiring tests use a minimal DOM stub and do not test browser layout or native browser APIs. Share-link and CSV fixtures were captured from the original app before extraction.
 
-Catalog fields: `sets` contains `code`, `name`, and `series`. Each record in `cards` contains `id`, `s` (set code), `n` (name), `r` (rarity), `sh` (Shining boolean), `c` (printed number), and `img` (image URL). Runtime indexes and derived numbers stay in JavaScript. Keep existing IDs and array positions unchanged.
+Catalog fields: `sets` contains `code`, `name`, and `series`. Each record in `cards` contains `id`, `s` (set code), `n` (name), `r` (rarity), `sh` (Shining boolean), `c` (printed number), and `img` (image URL). Runtime indexes and derived numbers stay in JavaScript. Keep existing card IDs unchanged.
 
 Card data from the MLP Merch Kayou Card Database (data.mlpmerch.com), CC BY-NC-SA.
 
@@ -60,3 +60,6 @@ Use **Quick Add** above the collection to switch to a compact checklist. Existin
 
 ## Mobile layout
 On screens up to 640px wide, collection stats start as a compact set completion summary and progress bar. **Show stats** expands the full dashboard; the expanded state stays intact during edits and filter or profile changes in the current session. Desktop shows the full dashboard. Search occupies its own row, filters fit in two columns, and card quantity buttons use 44px touch targets. Quick Add quantity fields use 16px text to avoid automatic zoom on phones.
+
+## Share-link compatibility
+New shares use v3 with stable UTF-8 card IDs and prefix compression. Quantity and wishlist/trade flags stay in one byte per entry. Catalog reordering and insertion do not change either new v3 links or legacy v2 links, whose original 572-card positions are frozen in `js/legacy-share-ids.js`. Unknown v3 IDs are skipped, allowing a newer catalog to be shared with an older client. ID-based links can be longer than v2 links, especially for large collections. Existing storage and backups remain unchanged.
