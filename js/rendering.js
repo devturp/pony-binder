@@ -101,16 +101,44 @@ export function createRenderer(store, state, filters, actions){
     </div></article>`;
   }
 
+  function quickHTML(c){
+    const e = entry(active(),c);
+    return `<article class="quick-row ${e.q?'owned':''}" data-i="${c.i}">
+      <button class="quick-card" data-act="open" aria-label="View ${esc(c.n)} ${esc(c.c)}${c.sh?' Shining':''}">
+        <span class="card-code">${c.sh?'※':''}${esc(c.c)} · ${c.r}</span>
+        <span class="card-name">${esc(c.n)}</span>
+        <span class="quick-variant">${c.sh?'Shining ※':'Regular'}</span>
+      </button>
+      ${st.view ? `<span class="quick-total" aria-label="Quantity">×${e.q}</span>` : `<label class="quick-quantity">Qty<input type="number" min="0" max="63" step="1" inputmode="numeric" data-quantity="${c.i}" value="${e.q}" aria-label="Quantity for ${esc(c.n)} ${esc(c.c)}${c.sh?' Shining':''}"></label>`}
+    </article>`;
+  }
+
   function renderGrid(){
     const p = active(), g = $('#grid');
+    g.classList.toggle('quick-list', st.quick);
+    $('#quickAdd').setAttribute('aria-pressed', String(st.quick));
+    $('#quickAdd').textContent = st.quick ? 'Card grid' : 'Quick Add';
+    $('#quickHelp').hidden = !st.quick;
+    $('#quickHelp').textContent = st.view ? 'Viewing shared quantities. This collection is read only.' : 'Enter quantities to save immediately. Use Tab to move through the checklist. Allowed quantities: 0–63.';
     if (!p){ g.innerHTML=''; $('#count').textContent=''; return; }
     const list = SORTED.filter(matches);
     $('#count').textContent = `Showing ${list.length} card${list.length===1?'':'s'}`;
-    g.innerHTML = list.length ? list.map(cardHTML).join('') :
+    g.innerHTML = list.length ? list.map(st.quick ? quickHTML : cardHTML).join('') :
       `<div class="empty"><b>No cards match</b>Try a different set, rarity or status filter.</div>`;
   }
 
   function updateCard(c){
+    if (st.quick){
+      const row = document.querySelector(`.quick-row[data-i="${c.i}"]`);
+      if (!row) return;
+      const e = entry(active(),c);
+      row.classList.toggle('owned', e.q>0);
+      const input = row.querySelector('[data-quantity]');
+      // Keep the focused input and caret intact while saving valid keystrokes.
+      if (input && document.activeElement !== input) input.value = e.q;
+      return;
+    }
+
     const el = document.querySelector(`.card[data-i="${c.i}"]`); if (!el) return;
     // Keep the tile visible until the next filter change to avoid jumpiness.
     el.outerHTML = cardHTML(c);
