@@ -240,3 +240,44 @@ test('all card images use Kayou while collection metadata and positions stay unc
   const metadata=rawCatalog.cards.map(({ img, ...card })=>card);
   assert.equal(createHash('sha256').update(JSON.stringify(metadata)).digest('hex'), '5dab7b60870ff8e47f666def696059da330b9a52994cb676d2997a48bd257849');
 });
+
+test('Quick Add saves quantities immediately, preserves flags and rejects invalid edits', () => {
+  const app=wire(); app.store.newProfile('Nick'); app.renderer.renderAll();
+  const c=CARDS.find(c=>c.s==='BP02'); app.state.setEntry(c,{q:1,w:true,t:true});
+  app.get('#quickAdd').onclick();
+  assert.equal(app.state.st.quick,true);
+  assert.match(app.get('#grid').innerHTML,/data-quantity=/);
+  assert.doesNotMatch(app.get('#grid').innerHTML,/<img/);
+  const input={value:'12',dataset:{quantity:String(c.i)},closest(){return this;}};
+  const fire=type=>app.get('#grid').listeners[type]({type,target:input});
+  fire('input');
+  assert.deepEqual(entry(app.store.me(),c),{q:12,w:true,t:true});
+  assert.equal(JSON.parse(app.data.get('ponybinder.v1')).profiles[app.store.db.current].cards[c.id].q,12);
+  assert.match(app.get('#stats').innerHTML,/12/);
+  for (const bad of ['', '-1', '64', '1.5', 'abc']){
+    input.value=bad; fire('input'); assert.equal(entry(app.store.me(),c).q,12);
+    fire('change'); assert.equal(Number(input.value),12);
+  }
+  input.value='0'; fire('input'); assert.deepEqual(entry(app.store.me(),c),{q:0,w:true,t:true});
+  app.state.setEntry(c,{w:false,t:false}); fire('input'); assert.equal(app.store.me().cards[c.id],undefined);
+  app.get('#quickAdd').onclick(); assert.equal(app.state.st.quick,false);
+  assert.match(app.get('#grid').innerHTML,/<img/);
+});
+
+test('Quick Add applies filters and shared quantities remain read only', () => {
+  const app=wire(); app.store.newProfile('Nick'); app.renderer.renderAll();
+  app.get('#quickAdd').onclick();
+  app.get('#rarity').onchange({target:{value:'CR'}});
+  app.get('#shining').onchange({target:{checked:true}});
+  const expected=CARDS.filter(c=>c.s==='BP02' && c.r==='CR' && c.sh);
+  assert.equal((app.get('#grid').innerHTML.match(/data-quantity=/g)||[]).length,expected.length);
+  const c=expected[0];
+  app.state.st.view={name:'Friend',cards:{[c.id]:{q:3,w:false,t:false}}}; app.renderer.renderAll();
+  assert.doesNotMatch(app.get('#grid').innerHTML,/data-quantity=/);
+  assert.match(app.get('#grid').innerHTML,/×3/);
+  const before=app.data.get('ponybinder.v1');
+  const input={value:'5',dataset:{quantity:String(c.i)},closest(){return this;}};
+  app.get('#grid').listeners.input({type:'input',target:input});
+  assert.equal(app.data.get('ponybinder.v1'),before);
+  assert.match(app.get('#quickHelp').textContent,/read only/);
+});

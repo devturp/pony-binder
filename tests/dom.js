@@ -6,7 +6,7 @@ export function createDOM(){
       this.attrs = attrs;
       this.dataset = Object.fromEntries([...attrs.matchAll(/data-([\w-]+)="([^"]*)"/g)].map(m => [m[1], m[2]]));
       this.listeners = {};
-      this.classList = { add(){}, remove(){} };
+      this.classList = { add(){}, remove(){}, toggle(){return true} };
       this.value = '';
       this.open = false;
       this.hidden = false;
@@ -31,11 +31,12 @@ export function createDOM(){
       });
     }
     querySelector(selector){ return selector.startsWith('#') ? nodes.get(selector) : this.querySelectorAll(selector)[0]; }
+    setAttribute(name, value){ this[name] = value; }
     addEventListener(type, handler){ this.listeners[type] = handler; }
     showModal(){ this.open = true; }
     close(){ this.open = false; }
   }
-  for(const id of ['catalogStatus','binder','profileArea','viewBanner','setTabs','rarity','status','stats','grid','count','q','shining','menuDlg','cardDlg','toast']) nodes.set('#'+id, new Element());
+  for(const id of ['quickAdd','quickHelp','catalogStatus','binder','profileArea','viewBanner','setTabs','rarity','status','stats','grid','count','q','shining','menuDlg','cardDlg','toast']) nodes.set('#'+id, new Element());
   const document = { body:new Element(), querySelector:selector => nodes.get(selector) || null };
   return { document, get:selector => nodes.get(selector), nodes };
 }
