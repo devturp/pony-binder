@@ -47,7 +47,7 @@ test('catalog keeps all 572 cards in their original share-link positions', () =>
  });
 test('existing v2 link fixture preserves gaps, quantities and flags', () => {
   const p = profile();
-  assert.equal(encode(p), 'v2.Nick%20%26%20Cordelia.AIKBAUC4A_8');
+  assert.match(encode(p), /^v3\./);
   assert.deepEqual(decode('v2.Nick%20%26%20Cordelia.AIKBAUC4A_8'), { ...p, color:'#6c4bb6' });
   assert.equal(decode('invalid'), null);
   assert.equal(decode('v2.%ZZ.'), null);
@@ -159,7 +159,7 @@ test('dialogs and delegated events work after switching profiles and in read-onl
   click('open'); assert.equal(app.get('#cardDlg').open,true);
   app.get('#cardDlg').querySelectorAll('[data-a]').find(b=>b.dataset.a==='wish').onclick();
   assert.equal(entry(app.store.me(),c).w,true);
-  app.dialogs.openShare(); assert.match(app.get('#menuDlg').innerHTML,/#view=v2.Cordelia/);
+  app.dialogs.openShare(); assert.match(app.get('#menuDlg').innerHTML,/#view=v3.Cordelia/);
   app.dialogs.openBackup(); assert.equal(typeof app.get('#expBtn').onclick,'function');
   app.state.st.view=decode(encode(profile())); app.renderer.renderAll();
   click('inc'); assert.equal(entry(app.store.me(),c).q,1);
@@ -297,4 +297,33 @@ test('mobile progress updates quantities and keeps expanded stats through view c
   app.state.st.view={name:'Friend',cards:{}};app.renderer.renderAll();
   assert.match(app.get('#progressText').textContent,/0 \/ 191/);
   app.get('#statsToggle').onclick();assert.equal(app.get('#statsToggle')['aria-expanded'],'false');
+});
+
+
+test('v3 and legacy v2 links survive catalog reordering and insertion', () => {
+  const p=profile(), link=encode(p), original=[...CARDS];
+  try {
+    CARDS.reverse(); CARDS.unshift({id:'future-card'});
+    assert.deepEqual(decode(link),{...p,color:'#6c4bb6'});
+    assert.equal(encode(p),link);
+    assert.deepEqual(decode('v2.Nick%20%26%20Cordelia.AIKBAUC4A_8'),{...p,color:'#6c4bb6'});
+  } finally { CARDS.splice(0,CARDS.length,...original); }
+});
+
+test('v3 supports dotted Unicode names, rejects corrupt records, and skips unknown IDs', () => {
+  const p={name:'Nick. 🦄',cards:profile().cards};
+  assert.deepEqual(decode(encode(p)),{...p,color:'#6c4bb6'});
+  const link=bytes=>'v3.Friend.'+Buffer.from(bytes).toString('base64url');
+  for (const bytes of [[1,1,65,1],[0,2,65],[0,1,255,1],[0,0,1],[0,1,65,0],[0,1,65,1,0,1,65,1]]) assert.equal(decode(link(bytes)),null);
+  assert.deepEqual(decode(link([0,1,65,1])),{name:'Friend',color:'#6c4bb6',cards:{}});
+});
+
+test('full v3 collection round-trips all flags and legacy map stays frozen', async () => {
+  const { LEGACY_SHARE_IDS }=await import('../js/legacy-share-ids.js');
+  assert.equal(createHash('sha256').update(JSON.stringify(LEGACY_SHARE_IDS)).digest('hex'),'a8f37da8422cf2cf5a991296d2b5e95b2e27d481b2765f60872f18d907785433');
+  assert.ok(Object.isFrozen(LEGACY_SHARE_IDS));
+  const p={name:'Full binder',cards:Object.fromEntries(CARDS.map((c,i)=>[c.id,{q:63,w:!!(i%2),t:!!(i%3)}]))};
+  assert.deepEqual(decode(encode(p)),{...p,color:'#6c4bb6'});
+  assert.equal(decode('v2.Friend.gA'),null);
+  assert.equal(decode('v2.Friend.AA'),null);
 });
