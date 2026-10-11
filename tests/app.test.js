@@ -16,12 +16,12 @@ const {createDialogs}=await import('../js/dialogs.js');
 const {bindEvents}=await import('../js/events.js');
 const {backupData,readBackup,csvData}=await import('../js/backup.js');
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
-function setup(){
+function setup(options={saveDelay:0}){
   const streams=[],writes=[];
   const backend={watchCards(uid,next,error){const stream={uid,next,error,stopped:false};streams.push(stream);return()=>stream.stopped=true;},writeCard(uid,id,patch){return new Promise((resolve,reject)=>writes.push({uid,id,patch,resolve,reject}));},logout:async()=>{},login:async()=>{}};
-  const store=createStore(backend);return {store,backend,streams,writes};
+  const store=createStore(backend,options);return {store,backend,streams,writes};
 }
-function signed(){const app=setup();app.store.connect({uid:'nick',displayName:'Nick'});app.streams[0].next({});return app;}
+function signed(options){const app=setup(options);app.store.connect({uid:'nick',displayName:'Nick'});app.streams[0].next({});return app;}
 function wire(env=setup()){
   const dom=createDOM();globalThis.document=dom.document;
   const state=createState(env.store),filters=createFilters(state,env.store);
@@ -125,4 +125,45 @@ test('restore applies card values to cloud only after explicit confirmation',asy
   globalThis.confirm=()=>false;app.get('#impFile').onchange({target:{files:[{text:async()=>backup}]}});await tick();assert.equal(app.writes.length,0);
   globalThis.confirm=()=>true;app.get('#impFile').onchange({target:{files:[{text:async()=>backup}]}});await tick();
   assert.deepEqual(app.writes[0].patch,{q:5,w:true,t:false});assert.equal(app.store.me().name,'Nick');
+});
+
+test('rapid edits combine after 750ms from the last click, with immediate UI and save guards',async t=>{
+  t.mock.timers.enable({apis:['setTimeout']});
+  const {store,writes,streams}=signed({}),c=CARDS[0];
+  store.setEntry(c,{q:1});t.mock.timers.tick(500);
+  store.setEntry(c,{q:2});t.mock.timers.tick(500);
+  store.setEntry(c,{q:3,w:true});
+  streams[0].next({[c.id]:{q:0,w:false,t:true}});
+  assert.deepEqual(entry(store.me(),c),{q:3,w:true,t:true});
+  assert.equal(store.status().pending,1);
+  await assert.rejects(store.logout(),/Wait/);
+  t.mock.timers.tick(749);assert.equal(writes.length,0);
+  t.mock.timers.tick(1);assert.equal(writes.length,1);
+  assert.deepEqual(writes[0].patch,{q:3,w:true});
+  writes[0].resolve();await tick();assert.equal(store.status().pending,0);
+});
+
+test('cards debounce independently and later edits wait behind an unchanged in-flight save',async t=>{
+  t.mock.timers.enable({apis:['setTimeout']});
+  const {store,writes}=signed({}),c=CARDS[0],other=CARDS[1];
+  store.setEntry(c,{q:1});t.mock.timers.tick(400);store.setEntry(other,{q:2});
+  t.mock.timers.tick(350);assert.equal(writes.length,1);
+  store.setEntry(c,{q:2});store.setEntry(c,{q:3,t:true});
+  assert.deepEqual(writes[0].patch,{q:1});
+  t.mock.timers.tick(400);assert.equal(writes.length,2);assert.equal(writes[1].id,other.id);
+  t.mock.timers.tick(350);assert.equal(writes.length,2);
+  writes[0].resolve();await tick();assert.equal(writes.length,3);
+  assert.deepEqual(writes[2].patch,{q:3,t:true});
+  writes[1].resolve();writes[2].resolve();await tick();assert.equal(store.status().pending,0);
+});
+
+test('account changes cancel waiting edits and failed debounced saves remain retryable',async t=>{
+  t.mock.timers.enable({apis:['setTimeout']});
+  const {store,writes,streams}=signed({});
+  store.setEntry(CARDS[0],{q:3});store.connect({uid:'cordelia'});streams[1].next({});
+  t.mock.timers.tick(750);assert.equal(writes.length,0);
+  store.setEntry(CARDS[0],{q:4});t.mock.timers.tick(750);
+  writes[0].reject(Error('offline'));await tick();assert.equal(store.status().failed,true);
+  store.retry();assert.equal(writes.length,2);assert.deepEqual(writes[1].patch,{q:4});
+  writes[1].resolve();await tick();assert.equal(store.status().pending,0);
 });

@@ -1,6 +1,6 @@
 import { BY_ID, COLORS } from './catalog.js';
 
-export function createStore(backend){
+export function createStore(backend,{saveDelay=750}={}){
   let user=null, profile=null, server={}, pending=[], unsubscribe=()=>{}, generation=0;
   let offline=false;
   let reconnect=()=>{};
@@ -17,6 +17,7 @@ export function createStore(backend){
     profile.cards=cards;
   }
   function connect(next){
+    for(const op of pending) clearTimeout(op.timer);
     generation++;unsubscribe();offline=false;user=next;pending=[];server={};error='';authReady=true;loading=!!next;
     profile=next?{name:next.displayName||'Collector',color:COLORS[0],cards:{}}:null;
     emit('account');
@@ -50,7 +51,7 @@ export function createStore(backend){
     for(const op of pending){
       if(seen.has(op.id)) continue;
       seen.add(op.id);
-      if(!op.running && !op.failed && running<6){running++;void send(op);}
+      if(op.ready && !op.running && !op.failed && running<6){running++;void send(op);}
     }
   }
   function setEntry(card,patch){
@@ -59,8 +60,20 @@ export function createStore(backend){
     if('q' in patch) clean.q=Math.max(0,Math.min(63,Math.trunc(Number(patch.q)||0)));
     if('w' in patch) clean.w=!!patch.w;
     if('t' in patch) clean.t=!!patch.t;
-    const op={uid:user.uid,id:card.id,patch:clean,epoch:generation,failed:false};
-    pending.push(op);rebuild();emit('cards',[card.id]);pump();return true;
+    // Only merge into the last unsent edit. Never mutate an in-flight transaction.
+    let op=pending.findLast(item=>item.id===card.id);
+    if(!op || op.running || op.failed){
+      op={uid:user.uid,id:card.id,patch:{},epoch:generation,failed:false};
+      pending.push(op);
+    }
+    Object.assign(op.patch,clean);
+    clearTimeout(op.timer);
+    op.ready=saveDelay===0;
+    if(!op.ready) op.timer=setTimeout(()=>{
+      if(op.epoch!==generation) return;
+      op.ready=true;pump();
+    },saveDelay);
+    rebuild();emit('cards',[card.id]);pump();return true;
   }
   const retry=()=>{if(error){reconnect();return;}for(const op of pending)op.failed=false;pump();};
   async function logout(){
