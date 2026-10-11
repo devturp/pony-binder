@@ -3,6 +3,8 @@ import { $ } from './ui.js';
 import { entry } from './state.js';
 
 export function bindEvents(store, state, renderer, dialogs, setEntry){
+  const dismissNotice = $('#dismissTestingNotice');
+  if (dismissNotice) dismissNotice.onclick = () => { $('#testingNotice').hidden = true; };
   const { me } = store;
   const { st } = state;
   const { renderAll, renderGrid } = renderer;
