@@ -23,7 +23,7 @@ button,input,select{font:inherit;color:inherit}
 .top{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--border)}
 .top-row{display:flex;align-items:center;justify-content:space-between;gap:12px;height:64px}
 .brand{display:flex;align-items:center;gap:10px;color:var(--text);text-decoration:none;font:700 22px var(--font-d);letter-spacing:-.01em}
-.logo{width:34px;height:34px;color:var(--text)}
+.logo{display:block;width:34px;height:34px;flex-shrink:0;object-fit:contain}
 .profile{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 .btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);background:var(--surface);border-radius:999px;padding:7px 14px;font-weight:700;font-size:14px;cursor:pointer;transition:background .15s,border-color .15s,transform .1s}
 .btn:hover{border-color:var(--accent)}
