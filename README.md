@@ -12,7 +12,19 @@ The status message distinguishes connection/loading, saving, saved, offline and 
 
 ## Firebase setup, required before deploying
 
-The supplied public web configuration is in `js/firebase.js`. No service-account credentials or private keys are used.
+Web configuration is injected at deployment from the repository Actions secret `FIREBASE_WEB_CONFIG`. Never commit real configuration, service-account credentials or private keys. Only browser configuration fields are accepted by the build.
+
+### Deployment and key rotation
+
+1. In Google Cloud → APIs & Services → Credentials for `pony-binder`, create a replacement browser API key. Restrict it to the required Firebase APIs, excluding unrelated services such as Generative Language API. Add website restrictions for `https://ponybinder.app/*` and only other origins actually used by the app. Keep Firebase Authentication's authorized domains configured separately.
+2. In this repository → Settings → Secrets and variables → Actions → New repository secret, name it `FIREBASE_WEB_CONFIG`. Set its value to the Firebase web configuration as a plain JSON object, using the replacement key. Include `apiKey`, `authDomain`, `projectId`, `appId` and optionally `storageBucket`, `messagingSenderId`, `measurementId`. Do not include JavaScript declarations or service-account fields.
+3. Before merging the deployment change, set Settings → Pages → Source to **GitHub Actions**. The workflow builds only runtime assets into `dist`, generates `js/firebase-config.js` there, and deploys to the existing custom domain. Missing or invalid configuration stops deployment.
+4. Merge, then verify Google sign-in and collection reads/writes at `ponybinder.app`. Delete the old exposed key in Google Cloud Credentials after the replacement works. If immediate revocation is required, delete it first; sign-in may be unavailable until the replacement deploys.
+5. Only after revocation, close the GitHub secret-scanning alert as **Revoked**. Source removal alone does not resolve exposure: commit history still contains the old key. Revocation renders that historical key unusable; this change does not rewrite history.
+
+The replacement browser key remains visible in the deployed site. GitHub Actions secrets keep it out of source commits; they do not make browser configuration confidential. API restrictions and Firestore rules enforce the relevant protections. See [Firebase API key guidance](https://firebase.google.com/docs/projects/api-keys) and [GitHub Pages custom workflows](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
+
+### Authentication and database setup
 
 1. In Firebase Authentication, enable Google and select a support email.
 2. In Authentication settings, authorize `devturp.github.io` and any custom hostname used for this app. Add `localhost` only if testing locally. Enter hostnames, without URL paths.
@@ -40,7 +52,7 @@ On phones, completion stats collapse into a compact summary; Show stats expands 
 
 ## Development
 
-Native JavaScript modules, no bundler or build step. Firebase SDK browser modules are pinned to version 13.0.0. Serve over HTTP, for example `python3 -m http.server 8000`. Run `npm test` with Node.js 22 or later. Tests use an injected cloud adapter and a minimal DOM stub; they do not exercise real Google OAuth, production Firestore, browser layout, or Firebase security-rule enforcement.
+Native JavaScript modules, no bundler. Deployment uses `node scripts/build-site.mjs` with the `FIREBASE_WEB_CONFIG` environment variable. Firebase SDK browser modules are pinned to version 13.0.0. For local development, copy `js/firebase-config.example.js` to the ignored `js/firebase-config.js` and fill in your restricted browser configuration, then serve over HTTP, for example `python3 -m http.server 8000`. Alternatively build and serve `dist`. Run `npm test` with Node.js 22 or later. Tests use an injected cloud adapter and a minimal DOM stub; they do not exercise real Google OAuth, production Firestore, browser layout, or Firebase security-rule enforcement.
 
 `js/firebase.js` implements Firebase operations; `js/storage.js` manages cloud state and queues; `js/state.js` holds view state; filters/rendering/events/dialogs handle the UI. `app.js` wires these together. The catalog loads before cloud initialization, so SDK initialization failure does not prevent public card browsing.
 
