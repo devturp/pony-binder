@@ -1,65 +1,58 @@
 # Pony Binder
 
-A simple collection tracker for the English **My Little Pony Trading Card Game** by KAYOU. It covers Fantasy Wonderland (BP01), Discord!!! (BP02), and Nightmare Night (BP03): 572 cards in all, Shining (※) parallels included.
+A collection tracker for the English My Little Pony Trading Card Game by KAYOU. Fantasy Wonderland (BP01), Discord!!! (BP02), and Nightmare Night (BP03), including all 572 regular and Shining cards.
 
-**Live site:** https://devturp.github.io/pony-binder/
+## Accounts and saving
 
-## Features
-- Track how many copies you own, plus wishlist and trade flags for every card
-- Completion progress by set and by rarity (C, U, SR, SPR, ER, GR, CR, RR)
-- Search, rarity, status and Shining filters
-- Multiple collectors on one device
-- Share links: friends can view a read-only snapshot of your binder and see what they have that you need
-- JSON backup/restore and CSV export
+Visitors can browse, search, filter and open card details without an account. Google sign-in enables one private binder per account, with quantities, wishlist and trade flags saved to Cloud Firestore and synchronized across devices. Guests cannot track cards. The application no longer reads or writes the old `ponybinder.v1` localStorage collection, and no automatic migration runs.
 
-All data lives in your browser's localStorage. Nothing gets uploaded.
+Authentication may persist using Firebase's own browser session storage. Firestore uses its default memory cache; the app does not configure a persistent collection cache. Signed-out users have no collection access. Sharing controls and `#view` collection links are disabled for everyone. Read-only collection sharing is on the backlog.
 
-## Adding a new set
-Add the set to `sets` in `data/catalog.json`, then **append** its cards to the end of `cards`. New v3 share links use stable card IDs. Keep existing IDs unchanged. Old v2 links use a frozen ID mapping in `js/legacy-share-ids.js`, which must never be edited.
+The status message distinguishes connection/loading, saving, saved, offline and failed changes. Retry resubmits failed changes. Explicit sign-out is blocked while writes are pending or failed. A navigation warning asks users to stay while writes are pending; browsers may not show this warning in every situation. Unsaved changes are held in memory and can be lost if the page closes, so do not leave until the page says all changes are saved.
 
-## Credits
-Original card list: [MLP Merch Kayou Card Database](https://data.mlpmerch.com/kayou-cards/series/trading-card-game/booster-pack/). Fan-made project, not affiliated with Hasbro or KAYOU.
+## Firebase setup, required before deploying
 
+The supplied public web configuration is in `js/firebase.js`. No service-account credentials or private keys are used.
+
+1. In Firebase Authentication, enable Google and select a support email.
+2. In Authentication settings, authorize `devturp.github.io` and any custom hostname used for this app. Add `localhost` only if testing locally. Enter hostnames, without URL paths.
+3. Create the default Cloud Firestore database using Standard edition in production mode. The app uses the `(default)` database. Keep the Spark plan; no Functions or Cloud Storage are used.
+4. Open Firestore → Rules, replace the existing rules with `firestore.rules`, and Publish. These rules allow only the matching authenticated Google account to read/write `/users/{uid}/cards/{cardId}`. They reject extra fields, non-integer quantities, quantities outside 0–63, and non-boolean flags. No other database paths are granted access.
+5. Alternatively, from your authenticated local Firebase CLI, run `firebase deploy --only firestore:rules --project pony-binder`. `firebase.json` points to the supplied rules file and does not change hosting.
+
+Use the Firebase Rules Playground to verify that unauthenticated users and a different UID cannot read or write another account's card. Test an owner read/write, then verify that invalid quantity/flag writes are denied. In the deployed app, check Google sign-in, a new empty collection, quantity/wishlist/trade edits, sign-out, reload and a second device signed into the same account. These live checks require project access and are not included in Node unit tests.
+
+## Data and synchronization
+
+Each card is a separate document under `/users/{uid}/cards/{stableCardId}`, containing `q`, `w`, and `t`. The authenticated user's Google display name labels their binder. No account email or name is saved in collection documents.
+
+A Firestore listener reads the signed-in account's card documents. Transactions create a complete card record if missing; otherwise they update only the changed fields. Edits to different cards and different fields cannot overwrite the entire binder. Simultaneous edits to the same field use the last committed value. Per-card queues preserve rapid edit order within a tab; at most six saves run concurrently. Pending edits are applied over incoming snapshots until acknowledged. Failed operations remain visible and retryable. Account changes detach the previous listener and ignore stale callbacks.
+
+Zero-quantity records remain when needed, rather than deleting documents and risking concurrent flag changes. Each initial listener connection reads the saved card documents, and changes cause further reads/writes, so monitor free-tier usage in Firebase.
+
+Backup download, CSV export and explicit restore remain available while signed in. Restore applies the file's card quantities/flags to the current account and resets cards absent from the backup. It does not import the old localStorage collection automatically, create additional collectors, or rename the Google account. Restore runs as individual queued card writes, not one atomic operation; failures may leave a partial restore until retried. Confirm replacements before starting and wait for all changes to save.
+
+## UI
+
+Quick Add switches between the card grid and a checklist. Valid whole quantities from 0–63 save immediately. Invalid edits leave saved values intact and revert on change. Rows remain visible until filters change, and focused Quick Add inputs stay intact during synchronization. Guests can use the checklist as a read-only card list.
+
+On phones, completion stats collapse into a compact summary; Show stats expands the dashboard. Search and filters use a mobile layout, and quantity controls have 44px touch targets. Desktop shows the full dashboard.
 
 ## Development
-The site uses native JavaScript modules. There is no bundler or runtime dependency. Serve the repository over HTTP, for example with `python3 -m http.server 8000`, then open `http://localhost:8000`. Opening `index.html` directly with a `file://` URL will not load the modules.
 
-`app.js` fetches `data/catalog.json` and validates it before creating the store, state, filters, renderer and dialogs, attaches events, then starts the app. While loading, it displays a status message. A failed request or invalid catalog displays a retry button before any collection controls are attached. The catalog uses a module-relative URL so it also works under the GitHub Pages `/pony-binder/` path.
+Native JavaScript modules, no bundler or build step. Firebase SDK browser modules are pinned to version 13.0.0. Serve over HTTP, for example `python3 -m http.server 8000`. Run `npm test` with Node.js 22 or later. Tests use an injected cloud adapter and a minimal DOM stub; they do not exercise real Google OAuth, production Firestore, browser layout, or Firebase security-rule enforcement.
 
-| File | Responsibility |
-| --- | --- |
-| `data/catalog.json` | Set metadata and card records, with no executable JavaScript |
-| `js/catalog.js` | JSON loading, validation, catalog lookup, derived card numbers, display sorting and rarity metadata |
-| `js/storage.js` | Load/save the existing `ponybinder.v1` database and create collectors |
-| `js/state.js` | Active binder, view hash, card entries and quantity updates |
-| `js/sharing.js` | Stable-ID v3 encoding and backward-compatible v2 decoding |
-| `js/filters.js` | Set, search, rarity, status, Shining and comparison matching |
-| `js/rendering.js` | Profile header, shared-view banner, tabs, filters, stats and grid |
-| `js/dialogs.js` | Card details, welcome, profiles, sharing and backup dialogs |
-| `js/backup.js` | Version 1 backup serialization/reading and CSV formatting |
-| `js/events.js` | Grid actions, filter inputs and hash changes |
-| `js/ui.js` | DOM lookup, HTML escaping, downloads and toasts |
+`js/firebase.js` implements Firebase operations; `js/storage.js` manages cloud state and queues; `js/state.js` holds view state; filters/rendering/events/dialogs handle the UI. `app.js` wires these together. The catalog loads before cloud initialization, so SDK initialization failure does not prevent public card browsing.
 
-Renderer dialog callbacks and dialog render callbacks are wired in `app.js`. The modules do not import one another in a cycle. Updating a card persists it through state, then refreshes its tile and stats through the renderer.
+## Catalog and images
 
-Run `npm test` with Node.js 22 or later. No dependency installation is needed. Tests cover storage compatibility, card updates, share links, filters, comparisons, backups, CSV output, module startup and dialog/event wiring. The wiring tests use a minimal DOM stub and do not test browser layout or native browser APIs. Share-link and CSV fixtures were captured from the original app before extraction.
+`data/catalog.json` contains `sets` and `cards`. Sets use `code`, `name`, `series`. Card fields: `id` (stable ID), `s` (set), `n` (name), `r` (rarity), `sh` (Shining boolean), `c` (printed number), `img` (image URL). Keep existing IDs unchanged. Runtime indexes and sorting remain in `js/catalog.js`.
 
-Catalog fields: `sets` contains `code`, `name`, and `series`. Each record in `cards` contains `id`, `s` (set code), `n` (name), `r` (rarity), `sh` (Shining boolean), `c` (printed number), and `img` (image URL). Runtime indexes and derived numbers stay in JavaScript. Keep existing card IDs unchanged.
+Images load directly from KAYOU's official CDN. Run `python3 scripts/update-kayou-images.py` to refresh image URLs from the official Fantasy Wonderland, Discord!!! and Nightmare Night pages. The updater preserves all other fields and requires Python 3.9 or later plus network access.
 
-Card data from the MLP Merch Kayou Card Database (data.mlpmerch.com), CC BY-NC-SA.
+Original card list: [MLP Merch Kayou Card Database](https://data.mlpmerch.com/kayou-cards/series/trading-card-game/booster-pack/), CC BY-NC-SA. Card images: KAYOU. Fan-made tool, not affiliated with Hasbro or KAYOU.
 
-## Official card images
-All 572 card image URLs point directly to KAYOU's official image host, `static-sg.kayouofficial.com`. The catalog remains local JSON; browsers download card images directly from KAYOU.
+## Backlog
 
-Image sources: [Fantasy Wonderland](https://www.kayouofficial.com/en-US/series/series-2nicsllo), [Discord!!!](https://www.kayouofficial.com/en-US/series/series-ry03llcx), and [Nightmare Night](https://www.kayouofficial.com/en-US/series/series-27z4pa09).
-
-Run `python3 scripts/update-kayou-images.py` to refresh image URLs from those pages. The updater matches printed card numbers and Shining status, including day/night and A/A2/B/B2/C/C2 variants. It preserves card IDs, names, all other metadata, and array order. It resolves every image before writing the catalog and stops on missing or duplicate matches. The updater requires network access and Python 3.9 or later, with no third-party packages. It depends on KAYOU's server-rendered page format.
-
-## Quick Add
-Use **Quick Add** above the collection to switch to a compact checklist. Existing set, search, rarity, status and Shining filters apply in both views. Enter a whole quantity from 0 to 63; valid edits save immediately to localStorage. Blank, fractional or out-of-range edits do not overwrite saved quantities and revert when committed. Editing preserves wishlist and trade flags, updates completion stats, and keeps rows in place until the next filter or view change. Shared binders display quantities without editable inputs. The view toggle lasts for the current session.
-
-## Mobile layout
-On screens up to 640px wide, collection stats start as a compact set completion summary and progress bar. **Show stats** expands the full dashboard; the expanded state stays intact during edits and filter or profile changes in the current session. Desktop shows the full dashboard. Search occupies its own row, filters fit in two columns, and card quantity buttons use 44px touch targets. Quick Add quantity fields use 16px text to avoid automatic zoom on phones.
-
-## Share-link compatibility
-New shares use v3 with stable UTF-8 card IDs and prefix compression. Quantity and wishlist/trade flags stay in one byte per entry. Catalog reordering and insertion do not change either new v3 links or legacy v2 links, whose original 572-card positions are frozen in `js/legacy-share-ids.js`. Unknown v3 IDs are skipped, allowing a newer catalog to be shared with an older client. ID-based links can be longer than v2 links, especially for large collections. Existing storage and backups remain unchanged.
+- Read-only collection links and trading comparisons after login/saving are stable.
+- Additional collectors under one account if needed.

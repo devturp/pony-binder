@@ -173,3 +173,9 @@ select{border:1px solid var(--border);background:var(--surface);border-radius:99
   .ctrls>div:not(.stepper){display:flex;justify-content:flex-end;width:100%}
   .quick-quantity input{font-size:16px}
 }
+
+.cloud-notice{padding-top:12px;font-size:14px;color:var(--muted)}
+.cloud-notice .btn{margin-left:8px}
+.account-name{font-weight:800;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+button:disabled{opacity:.5;cursor:default}
+body:not(.signed-in) .card:not(.owned) .card-img img{filter:none;opacity:1}

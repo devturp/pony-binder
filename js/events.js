@@ -4,7 +4,7 @@ import { entry } from './state.js';
 
 export function bindEvents(store, state, renderer, dialogs, setEntry){
   const { me } = store;
-  const { st, parseHash } = state;
+  const { st } = state;
   const { renderAll, renderGrid } = renderer;
   const { openCard } = dialogs;
   $('#grid').addEventListener('click', ev => {
@@ -12,7 +12,7 @@ export function bindEvents(store, state, renderer, dialogs, setEntry){
     const c = CARDS[+b.closest('[data-i]').dataset.i];
     const act = b.dataset.act;
     if (act==='open') return openCard(c);
-    if (st.view) return;
+    if (!store.editable()) return;
     const e = entry(me(),c);
     if (act==='inc') setEntry(c,{q:e.q+1});
     if (act==='dec') setEntry(c,{q:e.q-1});
@@ -23,7 +23,7 @@ export function bindEvents(store, state, renderer, dialogs, setEntry){
   $('#quickAdd').onclick = () => { st.quick = !st.quick; renderGrid(); };
   function saveQuantity(ev){
     const input = ev.target.closest('[data-quantity]');
-    if (!input || st.view || !me()) return;
+    if (!input || !store.editable()) return;
     const c = CARDS[Number(input.dataset.quantity)];
     if (!c) return;
     const value = input.value.trim();
@@ -41,6 +41,6 @@ export function bindEvents(store, state, renderer, dialogs, setEntry){
   $('#rarity').onchange = e => { st.rarity = e.target.value; renderGrid(); };
   $('#status').onchange = e => { st.status = e.target.value; renderGrid(); };
   $('#shining').onchange = e => { st.shining = e.target.checked; renderGrid(); };
-  window.addEventListener('hashchange', () => { parseHash(); renderAll(); });
+
 
 }
