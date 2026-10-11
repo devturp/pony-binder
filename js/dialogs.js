@@ -34,7 +34,7 @@ export function createDialogs(store, state, renderAll, setEntry){
             <button class="btn ${e.w?'primary':''}" data-a="wish">${e.w?'On wishlist':'Add to wishlist'}</button>
             <button class="btn ${e.t?'primary':''}" data-a="trade">${e.t?'Marked for trade':'Mark for trade'}</button>
           </div>`}
-        <p style="margin-top:16px;font-size:13px"><a href="https://data.mlpmerch.com/kayou-cards/details/${c.id}/" target="_blank" rel="noopener">View on MLP Merch</a> · <a href="https://www.pricecharting.com/search-products?q=${encodeURIComponent('my little pony '+c.c)}&type=prices" target="_blank" rel="noopener">Check prices</a></p>
+        <p style="margin-top:16px;font-size:13px"><a href="https://www.pricecharting.com/search-products?q=${encodeURIComponent('my little pony '+c.c)}&type=prices" target="_blank" rel="noopener">Check prices</a></p>
       </div></div>`;
       d.querySelector('[data-x]').onclick = () => d.close();
       d.querySelectorAll('[data-a]').forEach(b => b.onclick = () => {
