@@ -1,15 +1,9 @@
+import { firebaseConfig } from './firebase-config.js';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-app.js';
 import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-auth.js';
 import { getFirestore, collection, doc, onSnapshot, runTransaction } from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-firestore.js';
 
-const app = initializeApp({
-  apiKey:'AIzaSyAIniVhsD61whKdzZEGMul9SSBjcYi2AfU',
-  authDomain:'pony-binder.firebaseapp.com',
-  projectId:'pony-binder',
-  storageBucket:'pony-binder.firebasestorage.app',
-  messagingSenderId:'410982357743',
-  appId:'1:410982357743:web:d290ae255582761373191a'
-});
+const app = initializeApp(firebaseConfig);
 const auth = getAuth(app), db = getFirestore(app);
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt:'select_account' });
