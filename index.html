@@ -27,7 +27,10 @@
 
 <p class="wrap" id="catalogStatus" role="status">Loading cards…</p>
 <main class="wrap" id="binder" hidden>
-  <p class="testing-notice"><strong>Alpha testing:</strong> Pony Binder is still being tested. Your saved card collection may be lost or reset before the site enters beta.</p>
+  <div class="testing-notice" id="testingNotice">
+    <button class="testing-dismiss" id="dismissTestingNotice" type="button" aria-label="Dismiss alpha testing notice">×</button>
+    <p><strong>Alpha testing:</strong> Pony Binder is still being tested. Your saved card collection may be lost or reset before the site enters beta.</p>
+  </div>
 
   <section class="stats-area" id="statsArea" aria-label="Collection progress">
     <div class="mobile-progress">
