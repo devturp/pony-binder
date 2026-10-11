@@ -1,0 +1,21 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId}/cards/{cardId} {
+      function owner() {
+        return request.auth != null && request.auth.uid == userId
+          && request.auth.token.firebase.sign_in_provider == 'google.com';
+      }
+      function validCard() {
+        return request.resource.data.keys().hasOnly(['q', 'w', 't'])
+          && request.resource.data.keys().hasAll(['q', 'w', 't'])
+          && request.resource.data.q is int
+          && request.resource.data.q >= 0 && request.resource.data.q <= 63
+          && request.resource.data.w is bool && request.resource.data.t is bool;
+      }
+      allow read: if owner();
+      allow create, update: if owner() && validCard();
+      allow delete: if owner();
+    }
+  }
+}

@@ -3,8 +3,8 @@ import { $, esc, toast } from './ui.js';
 import { entry } from './state.js';
 
 export function createRenderer(store, state, filters, actions){
-  const { db, me, uid, save } = store;
-  const { st, active, parseHash } = state;
+  const { me } = store;
+  const { st, active } = state;
   const { inScope, matches } = filters;
   const ICON = {
     heart:'<svg viewBox="0 0 24 24" fill="FILL" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>',
@@ -12,28 +12,12 @@ export function createRenderer(store, state, filters, actions){
   };
 
   function renderProfile(){
-    const area = $('#profileArea'), p = me();
-    if (!p){ area.innerHTML = ''; return; }
-    area.innerHTML = `
-    <button class="who" id="whoBtn" title="Switch collector"><span class="avatar" style="background:${p.color}">${esc(p.name[0]||'?').toUpperCase()}</span>${esc(p.name)}</button>
-    <button class="btn" id="shareBtn"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M12 3v12M7 8l5-5 5 5"/></svg><span class="lbl">Share</span></button>
-    <button class="btn" id="backupBtn"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"/></svg><span class="lbl">Backup</span></button>`;
-    $('#whoBtn').onclick = actions.openProfiles; $('#shareBtn').onclick = actions.openShare; $('#backupBtn').onclick = actions.openBackup;
-  }
-
-  function renderBanner(){
-    const b = $('#viewBanner');
-    if (!st.view){ b.hidden = true; document.body.classList.remove('readonly'); return; }
-    b.hidden = false; document.body.classList.add('readonly');
-    b.innerHTML = `Viewing ${esc(st.view.name)}'s collection (view only)
-    ${me() ? '<button class="btn" id="saveFriend">Save as a profile</button>' : ''}
-    <button class="btn" id="exitView">${me() ? 'Back to my binder' : 'Start my own binder'}</button>`;
-    $('#exitView').onclick = () => { history.replaceState(null,'',location.pathname); parseHash(); renderAll(); if (!me()) actions.openWelcome(); };
-    const sf = $('#saveFriend');
-    if (sf) sf.onclick = () => {
-      const id = uid(); db.profiles[id] = { name: st.view.name, color: COLORS[Object.keys(db.profiles).length % COLORS.length], cards: st.view.cards, created: Date.now(), friend:true };
-      save(); toast(`Saved ${st.view.name} as a profile on this device`);
-    };
+    const area=$('#profileArea'), info=store.status();
+    document.body.classList.toggle('signed-in', !!info.user);
+    area.innerHTML=info.user ? `<span class="account-name">${esc(info.user.displayName||'Collector')}</span><button class="btn" id="backupBtn" ${store.editable()?'':'disabled'}>Backup</button><button class="btn" id="logoutBtn">Sign out</button>` : `<button class="btn primary" id="loginBtn" ${info.authReady?'':'disabled'}>Sign in with Google</button>`;
+    const login=$('#loginBtn');if(login) login.onclick=actions.login;
+    const logout=$('#logoutBtn');if(logout) logout.onclick=actions.logout;
+    const backup=$('#backupBtn');if(backup) backup.onclick=actions.openBackup;
   }
 
   function renderTabs(){
@@ -46,11 +30,12 @@ export function createRenderer(store, state, filters, actions){
   function renderFilters(){
     $('#rarity').innerHTML = '<option value="all">All rarities</option>' + RARITIES.map(([k,n]) => `<option value="${k}">${n} (${k})</option>`).join('');
     const s = $('#status');
-    const compare = st.view && me();
     s.innerHTML = `<option value="all">All cards</option><option value="owned">Owned</option><option value="missing">Missing</option>
     <option value="wish">Wishlist</option><option value="trade">For trade</option><option value="dupes">Duplicates</option>
-    ${compare ? `<option value="theyhave">They have, I need</option><option value="ihave">I have, they want</option>` : ''}`;
+    `;
     if (![...s.options].some(o => o.value===st.status)) st.status = 'all';
+    if (!store.editable()) st.status='all';
+    s.disabled=!store.editable();
     s.value = st.status; $('#rarity').value = st.rarity;
   }
 
@@ -95,7 +80,7 @@ export function createRenderer(store, state, filters, actions){
     </button>
     <div class="card-body">
       <div><p class="card-name">${esc(c.n)}</p><span class="card-code">${c.sh?'※':''}${esc(c.c)} · ${RNAME[c.r]}</span></div>
-      <div class="ctrls">
+      ${store.editable() ? `<div class="ctrls">
         <div class="stepper">
           <button class="icon-btn" data-act="dec" aria-label="Remove one">−</button>
           <span>${e.q}</span>
@@ -106,6 +91,7 @@ export function createRenderer(store, state, filters, actions){
           <button class="icon-btn trade ${e.t?'on':''}" data-act="trade" aria-pressed="${e.t}" title="Mark for trade" aria-label="Mark for trade">${ICON.swap}</button>
         </div>
       </div>
+    ` : ''}
     </div></article>`;
   }
 
@@ -117,7 +103,7 @@ export function createRenderer(store, state, filters, actions){
         <span class="card-name">${esc(c.n)}</span>
         <span class="quick-variant">${c.sh?'Shining ※':'Regular'}</span>
       </button>
-      ${st.view ? `<span class="quick-total" aria-label="Quantity">×${e.q}</span>` : `<label class="quick-quantity">Qty<input type="number" min="0" max="63" step="1" inputmode="numeric" data-quantity="${c.i}" value="${e.q}" aria-label="Quantity for ${esc(c.n)} ${esc(c.c)}${c.sh?' Shining':''}"></label>`}
+      ${!store.editable() ? `<span class="quick-total">${me()?`×${e.q}`:''}</span>` : `<label class="quick-quantity">Qty<input type="number" min="0" max="63" step="1" inputmode="numeric" data-quantity="${c.i}" value="${e.q}" aria-label="Quantity for ${esc(c.n)} ${esc(c.c)}${c.sh?' Shining':''}"></label>`}
     </article>`;
   }
 
@@ -127,8 +113,7 @@ export function createRenderer(store, state, filters, actions){
     $('#quickAdd').setAttribute('aria-pressed', String(st.quick));
     $('#quickAdd').textContent = st.quick ? 'Card grid' : 'Quick Add';
     $('#quickHelp').hidden = !st.quick;
-    $('#quickHelp').textContent = st.view ? 'Viewing shared quantities. This collection is read only.' : 'Enter quantities to save immediately. Use Tab to move through the checklist. Allowed quantities: 0–63.';
-    if (!p){ g.innerHTML=''; $('#count').textContent=''; return; }
+    $('#quickHelp').textContent = !store.editable() ? 'Sign in with Google to track your collection.' : 'Enter quantities to save immediately. Use Tab to move through the checklist. Allowed quantities: 0–63.';
     const list = SORTED.filter(matches);
     $('#count').textContent = `Showing ${list.length} card${list.length===1?'':'s'}`;
     g.innerHTML = list.length ? list.map(st.quick ? quickHTML : cardHTML).join('') :
@@ -152,7 +137,7 @@ export function createRenderer(store, state, filters, actions){
     el.outerHTML = cardHTML(c);
   }
 
-  function renderAll(){ renderProfile(); renderBanner(); renderFilters(); renderTabs(); renderStats(); renderGrid(); }
+  function renderAll(){ renderProfile(); renderFilters(); renderTabs(); renderStats(); renderGrid(); }
 
-  return { renderAll, renderTabs, renderStats, renderGrid, updateCard };
+  return { renderProfile, renderAll, renderTabs, renderStats, renderGrid, updateCard };
 }

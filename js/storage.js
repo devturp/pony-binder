@@ -1,21 +1,71 @@
-import { COLORS } from './catalog.js';
+import { BY_ID, COLORS } from './catalog.js';
 
-const KEY = 'ponybinder.v1';
-
-export function createStore(){
-  function load(){
-    try { const d = JSON.parse(localStorage.getItem(KEY)); if (d && d.profiles) return d; } catch(e){}
-    return { profiles:{}, current:null };
+export function createStore(backend){
+  let user=null, profile=null, server={}, pending=[], unsubscribe=()=>{}, generation=0;
+  let offline=false;
+  let reconnect=()=>{};
+  let loading=false, error='', authReady=false;
+  const listeners=new Set();
+  const editable=()=>!!user && !!profile && !loading && !error && !offline;
+  const me=()=>profile;
+  const status=()=>({user,loading,error,authReady,offline,pending:pending.length,failed:pending.some(op=>op.failed),editable:editable()});
+  const emit=(type='status',ids=[])=>listeners.forEach(fn=>fn({type,ids,...status()}));
+  function rebuild(){
+    if(!profile) return;
+    const cards=structuredClone(server);
+    for(const op of pending) cards[op.id]={q:0,w:false,t:false,...cards[op.id],...op.patch};
+    profile.cards=cards;
   }
-  const db = load();
-  const save = () => localStorage.setItem(KEY, JSON.stringify(db));
-  const me = () => db.profiles[db.current];
-  const uid = () => Math.random().toString(36).slice(2,9);
-  function newProfile(name){
-    const id = uid(), n = Object.keys(db.profiles).length;
-    db.profiles[id] = { name, color: COLORS[n % COLORS.length], cards:{}, created: Date.now() };
-    db.current = id; save(); return id;
+  function connect(next){
+    generation++;unsubscribe();offline=false;user=next;pending=[];server={};error='';authReady=true;loading=!!next;
+    profile=next?{name:next.displayName||'Collector',color:COLORS[0],cards:{}}:null;
+    emit('account');
+    if(!next) return;
+    const epoch=generation;
+    const watch=()=>backend.watchCards(next.uid,(cards,meta={})=>{
+      if(epoch!==generation) return;
+      offline=!!meta.fromCache;
+      if(offline){emit('account');return;}
+      const ids=[...new Set([...Object.keys(server),...Object.keys(cards),...pending.map(op=>op.id)])];
+      server=Object.fromEntries(Object.entries(cards).filter(([id])=>Object.hasOwn(BY_ID,id)));
+      const first=loading;loading=false;error='';rebuild();emit(first?'account':'cards',ids);
+    },()=>{if(epoch===generation){loading=false;error='Unable to load your collection. Check your connection and Firestore access rules.';emit('account');}});
+    reconnect=()=>{unsubscribe();loading=true;error='';emit('account');unsubscribe=watch();};
+    unsubscribe=watch();
   }
-
-  return { db, save, me, uid, newProfile };
+  async function send(op){
+    op.failed=false;op.running=true;emit();
+    try {
+      await backend.writeCard(op.uid,op.id,op.patch);
+      if(op.epoch!==generation) return;
+      server[op.id]={q:0,w:false,t:false,...server[op.id],...op.patch};
+      pending=pending.filter(item=>item!==op);rebuild();emit('cards',[op.id]);pump();
+    } catch(e){
+      if(op.epoch!==generation) return;
+      op.running=false;op.failed=true;emit();pump();
+    }
+  }
+  function pump(){
+    const seen=new Set();let running=pending.filter(op=>op.running).length;
+    for(const op of pending){
+      if(seen.has(op.id)) continue;
+      seen.add(op.id);
+      if(!op.running && !op.failed && running<6){running++;void send(op);}
+    }
+  }
+  function setEntry(card,patch){
+    if(!editable() || !Object.hasOwn(BY_ID,card.id)) return false;
+    const clean={};
+    if('q' in patch) clean.q=Math.max(0,Math.min(63,Math.trunc(Number(patch.q)||0)));
+    if('w' in patch) clean.w=!!patch.w;
+    if('t' in patch) clean.t=!!patch.t;
+    const op={uid:user.uid,id:card.id,patch:clean,epoch:generation,failed:false};
+    pending.push(op);rebuild();emit('cards',[card.id]);pump();return true;
+  }
+  const retry=()=>{if(error){reconnect();return;}for(const op of pending)op.failed=false;pump();};
+  async function logout(){
+    if(pending.length) throw new Error('Wait for your changes to save, or retry failed changes before signing out.');
+    await backend.logout();
+  }
+  return {attach:value=>{backend=value;},me,status,editable,setEntry,connect,retry,logout,login:()=>backend.login(),subscribe:fn=>{listeners.add(fn);return()=>listeners.delete(fn);},start:()=>backend.watchAuth(connect)};
 }
