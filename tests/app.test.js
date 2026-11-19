@@ -31,9 +31,9 @@ function wire(env=setup()){
   bindEvents(env.store,state,renderer,dialogs,env.store.setEntry);
   return {...env,...dom,state,filters,renderer,dialogs};
 }
-test('catalog metadata, ordering and official image URLs stay unchanged',()=>{
-  assert.equal(CARDS.length,572);
-  assert.equal(createHash('sha256').update(JSON.stringify(CARDS.map(c=>c.id))).digest('hex'),'a8f37da8422cf2cf5a991296d2b5e95b2e27d481b2765f60872f18d907785433');
+test('catalog includes BP04 and preserves all previous card IDs and ordering',()=>{
+  assert.equal(CARDS.length,769);
+  assert.equal(createHash('sha256').update(JSON.stringify(CARDS.filter(c=>c.s!=='BP04').map(c=>c.id))).digest('hex'),'a8f37da8422cf2cf5a991296d2b5e95b2e27d481b2765f60872f18d907785433');
   assert.ok(CARDS.every(c=>new URL(c.img).hostname==='static-sg.kayouofficial.com'));
 });
 test('guest browses cards and dialogs without tracking, localStorage or shared hashes',()=>{
@@ -98,7 +98,7 @@ test('filters and mobile progress work for cloud collection',()=>{
 });
 test('backups and CSV preserve stable card IDs and flags',()=>{
   const p={name:'Nick',color:'#d94c95',cards:{[CARDS[0].id]:{q:2,w:true,t:false}}};
-  assert.deepEqual(readBackup(JSON.stringify(backupData(p))),p);assert.equal(csvData(p).split('\n').length,573);
+  assert.deepEqual(readBackup(JSON.stringify(backupData(p))),p);assert.equal(csvData(p).split('\n').length,770);
 });
 test('malformed catalog leaves active catalog intact',async()=>{
   const before=catalog.CARDS;await assert.rejects(catalog.loadCatalog(async()=>({ok:false,status:404})));assert.equal(catalog.CARDS,before);
@@ -166,4 +166,39 @@ test('account changes cancel waiting edits and failed debounced saves remain ret
   writes[0].reject(Error('offline'));await tick();assert.equal(store.status().failed,true);
   store.retry();assert.equal(writes.length,2);assert.deepEqual(writes[1].patch,{q:4});
   writes[1].resolve();await tick();assert.equal(store.status().pending,0);
+});
+
+
+test('BP04 contains all official rarities, Tokens and separate Shining Emerald variants',()=>{
+  const cards=CARDS.filter(c=>c.s==='BP04');
+  assert.equal(catalog.SETS.find(s=>s.code==='BP04').name,"Hearth's Warming Eve");
+  const counts={};for(const c of cards){const key=(c.sh?'※':'')+c.r;counts[key]=(counts[key]||0)+1;}
+  assert.deepEqual(counts,{CR:12,GR:12,SR:14,U:18,C:48,RR:6,ER:6,SPR:28,'※CR':12,'※GR':6,'※RR':6,'※ER':12,'※SPR':11,TK:6});
+  assert.equal(new Set(cards.map(c=>c.id)).size,197);
+  assert.equal(new Set(cards.map(c=>(c.sh?'※':'')+c.c)).size,197);
+  assert.deepEqual(cards.filter(c=>c.r==='TK').map(c=>c.c),['TK-02','TK-03','TK-04','TK-05','TK-06','TK-07']);
+  const emeralds=catalog.SORTED.filter(c=>c.s==='BP04'&&c.r==='ER');
+  assert.deepEqual(emeralds.map(c=>(c.sh?'※':'')+c.c),Array.from({length:6},(_,i)=>{
+    const code=`BP04-ER${String(i+1).padStart(2,'0')}`;return [code,`※${code}-A`,`※${code}-B`];
+  }).flat());
+});
+
+test('BP04 supports set/rarity/Shining filters, stats, tracking and backup export',async()=>{
+  const app=wire(signed());app.state.st.set='BP04';app.renderer.renderAll();
+  assert.match(app.get('#setTabs').innerHTML,/Hearth&#39;s Warming Eve|Hearth's Warming Eve/);
+  assert.match(app.get('#progressText').textContent,/0 \/ 197/);
+  assert.match(app.get('#rarity').innerHTML,/Token \(TK\)/);
+  app.state.st.rarity='TK';assert.equal(CARDS.filter(app.filters.matches).length,6);
+  app.state.st.rarity='ER';app.state.st.shining=true;assert.equal(CARDS.filter(app.filters.matches).length,12);
+  app.state.st.q='ER01-B';assert.equal(CARDS.filter(app.filters.matches).length,1);
+  const variant=CARDS.find(c=>c.s==='BP04'&&c.c==='BP04-ER01-B'),token=CARDS.find(c=>c.s==='BP04'&&c.r==='TK');
+  app.store.setEntry(variant,{q:3,w:true});app.store.setEntry(token,{q:1});
+  assert.equal(app.writes.length,2);assert.notEqual(app.writes[0].id,app.writes[1].id);
+  for(const write of app.writes)write.resolve();await tick();
+  const restored=readBackup(JSON.stringify(backupData(app.store.me())));
+  assert.deepEqual(restored.cards[variant.id],{q:3,w:true,t:false});
+  assert.equal(restored.cards[token.id].q,1);
+  const csv=csvData(app.store.me());assert.match(csv,/※BP04-ER01-B/);assert.match(csv,/"TK-02"/);assert.match(csv,/"Token"/);
+  app.state.st.q='';app.state.st.rarity='all';app.state.st.shining=false;app.renderer.renderStats();
+  assert.match(app.get('#progressText').textContent,/2 \/ 197/);
 });

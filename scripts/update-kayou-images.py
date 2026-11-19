@@ -13,6 +13,7 @@ SERIES = {
     'BP01': 'https://www.kayouofficial.com/en-US/series/series-2nicsllo',
     'BP02': 'https://www.kayouofficial.com/en-US/series/series-ry03llcx',
     'BP03': 'https://www.kayouofficial.com/en-US/series/series-27z4pa09',
+    'BP04': 'https://www.kayouofficial.com/en-US/series/series-i9q374dz',
 }
 
 
@@ -71,3 +72,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
