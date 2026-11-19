@@ -186,3 +186,12 @@ body:not(.signed-in) .card:not(.owned) .card-img img{filter:none;opacity:1}
 .testing-dismiss{position:absolute;top:2px;right:2px;width:44px;height:44px;display:grid;place-items:center;padding:0;border:0;border-radius:8px;background:transparent;color:var(--text);font-size:24px;line-height:1;cursor:pointer}
 .testing-dismiss:hover{background:var(--surface-2)}
 .testing-dismiss:focus-visible{outline:3px solid var(--accent);outline-offset:-3px}
+
+
+.shared-banner{margin:16px 0;padding:16px;background:var(--accent-soft);border:1px solid var(--border);border-radius:var(--r)}
+.shared-banner h1{margin:0;font:600 24px var(--font-d)}
+.shared-banner p{margin:4px 0 0}
+.shared-view .profile .btn{text-decoration:none}
+#shareLink{font-size:16px;max-width:100%;margin-top:6px}
+.top-row{height:auto;min-height:64px;padding-top:8px;padding-bottom:8px}
+@media(max-width:640px){.profile{gap:6px}.profile .btn{padding:7px 10px}.shared-view .account-name{display:none}}

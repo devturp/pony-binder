@@ -1,2 +1,6 @@
 /js/firebase-config.js
 /dist/
+
+
+/node_modules/
+/*-debug.log

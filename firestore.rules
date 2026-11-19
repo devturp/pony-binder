@@ -1,11 +1,14 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function owner(userId) {
+      return request.auth != null && request.auth.uid == userId
+        && request.auth.token.firebase.sign_in_provider == 'google.com';
+    }
+    function validToken(token) {
+      return token is string && token.matches('^[a-f0-9]{64}$');
+    }
     match /users/{userId}/cards/{cardId} {
-      function owner() {
-        return request.auth != null && request.auth.uid == userId
-          && request.auth.token.firebase.sign_in_provider == 'google.com';
-      }
       function validCard() {
         return request.resource.data.keys().hasOnly(['q', 'w', 't'])
           && request.resource.data.keys().hasAll(['q', 'w', 't'])
@@ -13,9 +16,40 @@ service cloud.firestore {
           && request.resource.data.q >= 0 && request.resource.data.q <= 63
           && request.resource.data.w is bool && request.resource.data.t is bool;
       }
-      allow read: if owner();
-      allow create, update: if owner() && validCard();
-      allow delete: if owner();
+      allow read: if owner(userId);
+      allow create, update: if owner(userId) && validCard();
+      allow delete: if owner(userId);
+    }
+    match /users/{userId}/sharing/config {
+      allow get: if owner(userId);
+      allow list: if false;
+      allow create, update: if owner(userId)
+        && request.resource.data.keys().hasOnly(['token'])
+        && validToken(request.resource.data.token)
+        && getAfter(/databases/$(database)/documents/sharedCollections/$(request.resource.data.token)).data.ownerUid == userId;
+      allow delete: if owner(userId);
+    }
+    match /sharedCollections/{shareId} {
+      function activeLink() {
+        return get(/databases/$(database)/documents/users/$(resource.data.ownerUid)/sharing/config).data.token == shareId;
+      }
+      function validShare() {
+        return validToken(shareId)
+          && request.resource.data.keys().hasAll(['ownerUid', 'name', 'cards', 'updatedAt'])
+          && request.resource.data.keys().hasOnly(['ownerUid', 'name', 'cards', 'updatedAt'])
+          && request.resource.data.name == 'Shared collection'
+          && request.resource.data.cards is map && request.resource.data.cards.size() <= 5000
+          && request.resource.data.updatedAt == request.time
+          && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)/sharing/config).data.token == shareId;
+      }
+      // Direct document reads only. No public directory or collection queries.
+      // Missing documents can be checked when generating a fresh random link.
+      allow get: if validToken(shareId) && (resource == null || owner(resource.data.ownerUid) || activeLink());
+      allow list: if false;
+      allow create: if owner(request.resource.data.ownerUid) && validShare();
+      allow update: if owner(resource.data.ownerUid)
+        && request.resource.data.ownerUid == resource.data.ownerUid && validShare();
+      allow delete: if owner(resource.data.ownerUid);
     }
   }
 }
