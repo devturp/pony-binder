@@ -1,12 +1,15 @@
+import { shareURL } from './sharing.js';
 import { SETS, RNAME, BY_ID } from './catalog.js';
 import { $, esc, toast, download } from './ui.js';
 import { entry } from './state.js';
 import { backupData, csvData, readBackup } from './backup.js';
 
-export function createDialogs(store, state, renderAll, setEntry){
+export function createDialogs(store, state, renderAll, setEntry, sharing){
   const { me } = store;
   const { active } = state;
   const menu = $('#menuDlg');
+  let sharingOpen=false;
+  sharing?.subscribe(()=>{if(sharingOpen && menu.open)drawShare();});
   function showMenu(html, closable=true){
     menu.innerHTML = `<div class="dlg-in">${html}</div>`;
     menu.oncancel = closable ? null : (e => e.preventDefault());
@@ -28,7 +31,7 @@ export function createDialogs(store, state, renderAll, setEntry){
           <dt>Set</dt><dd>${esc(SETS.find(s=>s.code===c.s).name)}</dd>
           <dt>Rarity</dt><dd>${RNAME[c.r]}${c.sh?' · Shining':''}</dd>
           ${mine?`<dt>You own</dt><dd>${mine.q}</dd>`:''}</dl>
-        ${ro ? `<p>Sign in with Google to track this card.</p>` : `
+        ${ro ? store.status().shared ? `<p>Owned: ${e.q}${e.w?' · On wishlist':''}${e.t?' · Marked for trade':''}</p><p>This collection is read-only.</p>` : `<p>Sign in with Google to track this card.</p>` : `
           <div class="big-stepper"><button class="icon-btn" data-a="dec" aria-label="Remove one">−</button><span>${e.q}</span><button class="icon-btn" data-a="inc" aria-label="Add one">+</button><span style="font:600 15px var(--font-b);color:var(--muted)">owned</span></div>
           <div class="row">
             <button class="btn ${e.w?'primary':''}" data-a="wish">${e.w?'On wishlist':'Add to wishlist'}</button>
@@ -49,6 +52,7 @@ export function createDialogs(store, state, renderAll, setEntry){
   }
 
   function openBackup(){
+    sharingOpen=false;
     if(!store.editable()) return;
     showMenu(`<h2>Backup and restore</h2>
     <p>Your collection syncs to your Google account. Download a backup or CSV for your own records. Restoring replaces your current cloud collection.</p>
@@ -82,5 +86,30 @@ export function createDialogs(store, state, renderAll, setEntry){
     }
     menu.close();renderAll();toast('Restore queued. Check the save status before leaving.');
   }
-  return {openCard,openBackup};
+  function drawShare(){
+    const info=sharing.status();
+    const link=info.token?shareURL(info.token):'';
+    showMenu(`<h2>Share your collection</h2>
+      <p>Anyone with this link can view your card quantities, wishlist and trade flags without signing in. They cannot edit your collection. Your Google name and email are not included.</p>
+      <p>The shared view updates after your changes save. Anyone with the link can forward it. Stop sharing to disable the link.</p>
+      ${link?`<label for="shareLink">Read-only link</label><input id="shareLink" type="text" readonly value="${esc(link)}">`:''}
+      <p id="shareMessage" role="status">${esc(info.error || (info.busy?'Updating sharing…':!info.ready?'Loading sharing settings…':store.status().pending?'Wait for your collection to finish saving.':info.pending?'Updating shared collection…':info.token?'Sharing is on.':'Sharing is off.'))}</p>
+      <div class="row">${!info.ready?'<button class="btn" id="retryShareSettings">Retry loading</button>':''}${link?`<button class="btn primary" id="copyShare">Copy link</button><button class="btn" id="updateShare" ${info.busy?'disabled':''}>Retry update</button><button class="btn" id="revokeShare" ${info.busy?'disabled':''}>Stop sharing</button>`:`<button class="btn primary" id="createShare" ${!info.ready||info.busy||store.status().pending?'disabled':''}>Create link</button>`}<button class="btn ghost" id="closeShare">Close</button></div>`);
+    const run=async action=>{try{await action();}catch{if(sharingOpen&&menu.open)drawShare();}};
+    const copy=$('#copyShare');if(copy)copy.onclick=async()=>{
+      try{await navigator.clipboard.writeText(link);if(sharingOpen&&menu.open)$('#shareMessage').textContent='Link copied.';}
+      catch{if(sharingOpen&&menu.open){$('#shareLink').focus();$('#shareLink').select();$('#shareMessage').textContent='Select and copy the link above.';}}
+    };
+    const retrySettings=$('#retryShareSettings');if(retrySettings)retrySettings.onclick=sharing.retry;
+    const create=$('#createShare');if(create)create.onclick=()=>run(sharing.create);
+    const update=$('#updateShare');if(update)update.onclick=()=>run(sharing.update);
+    const revoke=$('#revokeShare');if(revoke)revoke.onclick=()=>run(sharing.revoke);
+    $('#closeShare').onclick=()=>{sharingOpen=false;menu.close();};
+  }
+  function openShare(){
+    if(!sharing || !store.editable())return;
+    sharingOpen=true;drawShare();
+  }
+  return {openCard,openBackup,openShare};
 }
+

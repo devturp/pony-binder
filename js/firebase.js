@@ -1,13 +1,15 @@
+import { shareBackend } from './share-backend.js';
 import { firebaseConfig } from './firebase-config.js';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-app.js';
 import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-auth.js';
-import { getFirestore, collection, doc, onSnapshot, runTransaction } from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-firestore.js';
+import { getFirestore, collection, doc, onSnapshot, runTransaction, serverTimestamp } from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-firestore.js';
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app), db = getFirestore(app);
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt:'select_account' });
 export const cloud = {
+  ...shareBackend(db,{doc,onSnapshot,runTransaction,serverTimestamp}),
   watchAuth:callback=>onAuthStateChanged(auth,callback),
   login:()=>signInWithPopup(auth,provider),
   logout:()=>signOut(auth),
@@ -20,3 +22,4 @@ export const cloud = {
     else transaction.set(ref,{q:0,w:false,t:false,...patch});
   })
 };
+

@@ -6,7 +6,7 @@ A collection tracker for the English My Little Pony Trading Card Game by KAYOU. 
 
 Visitors can browse, search, filter and open card details without an account. Google sign-in enables one private binder per account, with quantities, wishlist and trade flags saved to Cloud Firestore and synchronized across devices. Guests cannot track cards. The application no longer reads or writes the old `ponybinder.v1` localStorage collection, and no automatic migration runs.
 
-Authentication may persist using Firebase's own browser session storage. Firestore uses its default memory cache; the app does not configure a persistent collection cache. Signed-out users have no collection access. Sharing controls and `#view` collection links are disabled for everyone. Read-only collection sharing is on the backlog.
+Authentication may persist using Firebase's own browser session storage. Firestore uses its default memory cache; the app does not configure a persistent collection cache. Signed-out users can view a shared collection only through its active random link. Original `#view` links remain unsupported; new sharing links use `#share=<token>`.
 
 The status message distinguishes connection/loading, saving, saved, offline and failed changes. Retry resubmits failed changes. Explicit sign-out is blocked while writes are pending or failed. A navigation warning asks users to stay while writes are pending; browsers may not show this warning in every situation. Unsaved changes are held in memory and can be lost if the page closes, so do not leave until the page says all changes are saved.
 
@@ -29,7 +29,7 @@ The replacement browser key remains visible in the deployed site. GitHub Actions
 1. In Firebase Authentication, enable Google and select a support email.
 2. In Authentication settings, authorize `devturp.github.io` and any custom hostname used for this app. Add `localhost` only if testing locally. Enter hostnames, without URL paths.
 3. Create the default Cloud Firestore database using Standard edition in production mode. The app uses the `(default)` database. Keep the Spark plan; no Functions or Cloud Storage are used.
-4. Open Firestore → Rules, replace the existing rules with `firestore.rules`, and Publish. These rules allow only the matching authenticated Google account to read/write `/users/{uid}/cards/{cardId}`. They reject extra fields, non-integer quantities, quantities outside 0–63, and non-boolean flags. No other database paths are granted access.
+4. Open Firestore → Rules, replace the existing rules with `firestore.rules`, and Publish. These rules allow only the matching authenticated Google account to read/write `/users/{uid}/cards/{cardId}`. They reject extra fields, non-integer quantities, quantities outside 0–63, and non-boolean flags. Private sharing settings are owner-only. The shared collection rules allow direct reads through active random links and deny all collection listing and visitor writes. Publish the updated rules before using the Share feature.
 5. Alternatively, from your authenticated local Firebase CLI, run `firebase deploy --only firestore:rules --project pony-binder`. `firebase.json` points to the supplied rules file and does not change hosting.
 
 Use the Firebase Rules Playground to verify that unauthenticated users and a different UID cannot read or write another account's card. Test an owner read/write, then verify that invalid quantity/flag writes are denied. In the deployed app, check Google sign-in, a new empty collection, quantity/wishlist/trade edits, sign-out, reload and a second device signed into the same account. These live checks require project access and are not included in Node unit tests.
@@ -44,6 +44,20 @@ Zero-quantity records remain when needed, rather than deleting documents and ris
 
 Backup download, CSV export and explicit restore remain available while signed in. Restore applies the file's card quantities/flags to the current account and resets cards absent from the backup. It does not import the old localStorage collection automatically, create additional collectors, or rename the Google account. Restore runs as individual queued card writes, not one atomic operation; failures may leave a partial restore until retried. Confirm replacements before starting and wait for all changes to save.
 
+## Read-only collection sharing
+
+Sign in, wait for your collection to load and save, then choose **Share → Create link → Copy link**. Sharing starts off for every account. Friends can open the link without signing in, browse all sets, filter owned/missing/wishlist/trade cards, view stats and open card details. The shared view has no quantity, wishlist, trade, backup, restore or sharing controls, even if the visitor has signed in elsewhere. Owners can choose **Stop sharing** to revoke access. Creating a link after revocation generates a new random token; old links stay disabled.
+
+Each link contains 32 cryptographically random bytes (256 bits) in the URL fragment. Tokens do not contain user IDs or encoded collection data. No public directory exists; Firestore rules deny listing and querying shared collection documents. Anyone holding a link can forward it, and downloaded copies or screenshots cannot be recalled. Shared pages request no indexing and use a no-referrer policy. The visitor store does not subscribe to auth or private card paths. Cached snapshots are not shown until server access is confirmed, and missing/revoked/denied links clear the visible collection.
+
+`/users/{uid}/sharing/config` privately records the active token. `/sharedCollections/{token}` holds one compact published card map, a generic display name, the owner's Firebase UID for access control, and a server timestamp. Only known card IDs and `q`, `w`, `t` fields are copied; Google display names, email addresses, tokens and backup metadata are not published. Existing private card rules remain owner-only.
+
+After private changes finish saving, the signed-in owner's open page publishes an updated shared map after a 1.5-second quiet window. This is a separate document write per combined update, not a write for each shared card. Guests read/listen to one shared document, and updates incur normal Firestore reads. Rules may also incur reads of the private link-setting document. Accounts with sharing off do not publish copies. Pending shared updates are shown in the save status and navigation warning; explicit sign-out flushes pending shared updates. A failed shared update leaves private saves intact and offers **Retry update** in Share. Before leaving, wait until both private and shared saves finish; otherwise the shared version may temporarily lag until the owner reopens the site. On sign-in, enabled links refresh from the loaded collection.
+
+Creating and stopping sharing use atomic Firestore transactions. Publishing rechecks the private active token, so a stale tab cannot recreate a revoked link. Account changes cancel queued publication and ignore callbacks from the previous account. Share documents cannot be reassigned to another owner or written through a revoked token. Sharing failures do not grant additional database permissions.
+
+Deployment: publish the PR's entire `firestore.rules` file through Firebase Console → Firestore Database → Rules, or run `firebase deploy --only firestore:rules --project pony-binder` from your authenticated local CLI. The Pages workflow tests rules but does not deploy them. No new production secret, Functions deployment, paid plan or database index is required. In production, verify owner create/copy, incognito read-only viewing, saved-edit updates and revocation before announcing the feature.
+
 ## UI
 
 Quick Add switches between the card grid and a checklist. Valid whole quantities from 0–63 save immediately. Invalid edits leave saved values intact and revert on change. Rows remain visible until filters change, and focused Quick Add inputs stay intact during synchronization. Guests can use the checklist as a read-only card list.
@@ -52,7 +66,7 @@ On phones, completion stats collapse into a compact summary; Show stats expands 
 
 ## Development
 
-Native JavaScript modules, no bundler. Deployment uses `node scripts/build-site.mjs` with the `FIREBASE_WEB_CONFIG` environment variable. Firebase SDK browser modules are pinned to version 13.0.0. For local development, copy `js/firebase-config.example.js` to the ignored `js/firebase-config.js` and fill in your restricted browser configuration, then serve over HTTP, for example `python3 -m http.server 8000`. Alternatively build and serve `dist`. Run `npm test` with Node.js 22 or later. Tests use an injected cloud adapter and a minimal DOM stub; they do not exercise real Google OAuth, production Firestore, browser layout, or Firebase security-rule enforcement.
+Native JavaScript modules, no bundler. Deployment uses `node scripts/build-site.mjs` with the `FIREBASE_WEB_CONFIG` environment variable. Firebase SDK browser modules are pinned to version 13.0.0. For local development, copy `js/firebase-config.example.js` to the ignored `js/firebase-config.js` and fill in your restricted browser configuration, then serve over HTTP, for example `python3 -m http.server 8000`. Alternatively build and serve `dist`. Run `npm ci` and `npm test` with Node.js 24.12 or later. Run `npm run test:rules` with Java 21 or later to exercise access controls against the local Firestore emulator using a demo project. Both checks run in the deployment workflow. Tests use an injected cloud adapter and a minimal DOM stub; they do not exercise real Google OAuth, production Firestore, browser layout, or production Firebase security-rule enforcement. The separate emulator tests verify rules and sharing transactions without production credentials.
 
 `js/firebase.js` implements Firebase operations; `js/storage.js` manages cloud state and queues; `js/state.js` holds view state; filters/rendering/events/dialogs handle the UI. `app.js` wires these together. The catalog loads before cloud initialization, so SDK initialization failure does not prevent public card browsing.
 
@@ -66,7 +80,7 @@ Original card list: [MLP Merch Kayou Card Database](https://data.mlpmerch.com/ka
 
 ## Backlog
 
-- Read-only collection links and trading comparisons after login/saving are stable.
+- Trading comparisons between collections.
 - Additional collectors under one account if needed.
 
 

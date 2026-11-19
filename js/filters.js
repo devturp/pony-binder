@@ -11,7 +11,7 @@ export function createFilters(state, store){
     if (st.rarity!=='all' && c.r!==st.rarity) return false;
     if (st.shining && !c.sh) return false;
     if (st.q){ const q = st.q.toLowerCase(); if (!c.n.toLowerCase().includes(q) && !c.c.toLowerCase().includes(q)) return false; }
-    if (!store.editable()) return true;
+    if (!store.editable() && !store.status().shared) return true;
     switch(st.status){
       case 'owned': return e.q>0;
       case 'missing': return !e.q;
@@ -25,3 +25,4 @@ export function createFilters(state, store){
 
   return { inScope, matches };
 }
+

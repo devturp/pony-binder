@@ -14,9 +14,12 @@ export function createRenderer(store, state, filters, actions){
   function renderProfile(){
     const area=$('#profileArea'), info=store.status();
     document.body.classList.toggle('signed-in', !!info.user);
-    area.innerHTML=info.user ? `<span class="account-name">${esc(info.user.displayName||'Collector')}</span><button class="btn" id="backupBtn" ${store.editable()?'':'disabled'}>Backup</button><button class="btn" id="logoutBtn">Sign out</button>` : `<button class="btn primary" id="loginBtn" ${info.authReady?'':'disabled'}>Sign in with Google</button>`;
+    document.body.classList.toggle('shared-view', !!info.shared);
+    if(info.shared){area.innerHTML='<span class="account-name">Read-only collection</span><a class="btn" href="./">My collection</a>';return;}
+    area.innerHTML=info.user ? `<span class="account-name">${esc(info.user.displayName||'Collector')}</span><button class="btn" id="backupBtn" ${store.editable()?'':'disabled'}>Backup</button><button class="btn" id="shareBtn" ${store.editable()?'':'disabled'}>Share</button><button class="btn" id="logoutBtn">Sign out</button>` : `<button class="btn primary" id="loginBtn" ${info.authReady?'':'disabled'}>Sign in with Google</button>`;
     const login=$('#loginBtn');if(login) login.onclick=actions.login;
     const logout=$('#logoutBtn');if(logout) logout.onclick=actions.logout;
+    const share=$('#shareBtn');if(share)share.onclick=actions.openShare;
     const backup=$('#backupBtn');if(backup) backup.onclick=actions.openBackup;
   }
 
@@ -34,8 +37,9 @@ export function createRenderer(store, state, filters, actions){
     <option value="wish">Wishlist</option><option value="trade">For trade</option><option value="dupes">Duplicates</option>
     `;
     if (![...s.options].some(o => o.value===st.status)) st.status = 'all';
-    if (!store.editable()) st.status='all';
-    s.disabled=!store.editable();
+    const canFilter=store.editable() || (store.status().shared && !!active());
+    if (!canFilter && !store.status().shared) st.status='all';
+    s.disabled=!canFilter;
     s.value = st.status; $('#rarity').value = st.rarity;
   }
 
@@ -111,9 +115,9 @@ export function createRenderer(store, state, filters, actions){
     const p = active(), g = $('#grid');
     g.classList.toggle('quick-list', st.quick);
     $('#quickAdd').setAttribute('aria-pressed', String(st.quick));
-    $('#quickAdd').textContent = st.quick ? 'Card grid' : 'Quick Add';
+    $('#quickAdd').textContent = st.quick ? 'Card grid' : store.status().shared ? 'Checklist' : 'Quick Add';
     $('#quickHelp').hidden = !st.quick;
-    $('#quickHelp').textContent = !store.editable() ? 'Sign in with Google to track your collection.' : 'Enter quantities to save immediately. Use Tab to move through the checklist. Allowed quantities: 0–63.';
+    $('#quickHelp').textContent = store.status().shared ? 'Read-only checklist. Quantities belong to this shared collection.' : !store.editable() ? 'Sign in with Google to track your collection.' : 'Enter quantities to save immediately. Use Tab to move through the checklist. Allowed quantities: 0–63.';
     const list = SORTED.filter(matches);
     $('#count').textContent = `Showing ${list.length} card${list.length===1?'':'s'}`;
     g.innerHTML = list.length ? list.map(st.quick ? quickHTML : cardHTML).join('') :
@@ -141,3 +145,4 @@ export function createRenderer(store, state, filters, actions){
 
   return { renderProfile, renderAll, renderTabs, renderStats, renderGrid, updateCard };
 }
+
