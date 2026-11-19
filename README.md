@@ -1,6 +1,6 @@
 # Pony Binder
 
-A collection tracker for the English My Little Pony Trading Card Game by KAYOU. Fantasy Wonderland (BP01), Discord!!! (BP02), and Nightmare Night (BP03), including all 572 regular and Shining cards.
+A collection tracker for the English My Little Pony Trading Card Game by KAYOU. Fantasy Wonderland (BP01), Discord!!! (BP02), Nightmare Night (BP03), and Hearth's Warming Eve (BP04), including all 769 regular, Shining, and Token cards.
 
 ## Accounts and saving
 
@@ -60,7 +60,7 @@ Native JavaScript modules, no bundler. Deployment uses `node scripts/build-site.
 
 `data/catalog.json` contains `sets` and `cards`. Sets use `code`, `name`, `series`. Card fields: `id` (stable ID), `s` (set), `n` (name), `r` (rarity), `sh` (Shining boolean), `c` (printed number), `img` (image URL). Keep existing IDs unchanged. Runtime indexes and sorting remain in `js/catalog.js`.
 
-Images load directly from KAYOU's official CDN. Run `python3 scripts/update-kayou-images.py` to refresh image URLs from the official Fantasy Wonderland, Discord!!! and Nightmare Night pages. The updater preserves all other fields and requires Python 3.9 or later plus network access.
+Images load directly from KAYOU's official CDN. Run `python3 scripts/update-kayou-images.py` to refresh image URLs from the official Fantasy Wonderland, Discord!!!, Nightmare Night and Hearth's Warming Eve pages. The updater preserves all other fields and requires Python 3.9 or later plus network access.
 
 Original card list: [MLP Merch Kayou Card Database](https://data.mlpmerch.com/kayou-cards/series/trading-card-game/booster-pack/), CC BY-NC-SA. Card images: KAYOU. Fan-made tool, not affiliated with Hasbro or KAYOU.
 
@@ -68,3 +68,8 @@ Original card list: [MLP Merch Kayou Card Database](https://data.mlpmerch.com/ka
 
 - Read-only collection links and trading comparisons after login/saving are stable.
 - Additional collectors under one account if needed.
+
+
+## Hearth's Warming Eve (BP04)
+
+The 197 entries come directly from [Kayou's official card list](https://www.kayouofficial.com/en-US/series/series-i9q374dz): 146 non-Shining entries (including six Tokens) and 51 Shining variants. Shining Emerald cards retain the official A/B suffixes as separate trackable entries. Token numbers remain TK-02 through TK-07, as listed by Kayou; no TK-01 is invented. Names and image URLs follow the source, including its spelling. New stable IDs use the set and printed card code, with a Shining suffix where needed. All BP01–BP03 records and IDs remain unchanged.

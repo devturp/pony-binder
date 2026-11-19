@@ -1,7 +1,7 @@
 export let SETS = [], CARDS = [], SORTED = [], BY_ID = {};
 export const RARITIES = [
   ['C','Common'],['U','Uncommon'],['SR','Silver Rare'],['SPR','Sapphire Rare'],
-  ['ER','Emerald Rare'],['GR','Gold Rare'],['CR','Colorful Rare'],['RR','Ruby Rare']];
+  ['ER','Emerald Rare'],['GR','Gold Rare'],['CR','Colorful Rare'],['RR','Ruby Rare'],['TK','Token']];
 export const RNAME = Object.fromEntries(RARITIES);
 export const RORD = Object.fromEntries(RARITIES.map(([k],i)=>[k,i]));
 export const COLORS = ['#d94c95','#6c4bb6','#2f9e6f','#e07a2e','#2f7fd9','#b8418a','#8a6d1f','#c0392b'];
@@ -28,7 +28,8 @@ export async function loadCatalog(fetcher = globalThis.fetch){
     ids.add(card.id);
   }
   SETS = data.sets;
-  CARDS = data.cards.map((c,i) => ({ ...c, i, num:parseInt(c.c.replace(/^.*?(\d+)$/,'$1'),10) || 0 }));
+  CARDS = data.cards.map((c,i) => ({ ...c, i, num:parseInt(c.c.match(/(\d+)(?:-[A-Z])?$/)?.[1],10) || 0 }));
   SORTED = [...CARDS].sort((a,b) => a.s.localeCompare(b.s) || RORD[a.r]-RORD[b.r] || a.num-b.num || (a.sh-b.sh));
   BY_ID = Object.fromEntries(CARDS.map(c => [c.id,c]));
 }
+
